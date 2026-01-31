@@ -37,11 +37,7 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
 
     // Send welcome message
     let welcome = ServerMessage::welcome();
-    if sender
-        .send(Message::Text(welcome.to_json()))
-        .await
-        .is_err()
-    {
+    if sender.send(Message::Text(welcome.to_json())).await.is_err() {
         tracing::error!("Failed to send welcome message");
         state.unregister_client(client_id).await;
         return;
