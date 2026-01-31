@@ -330,11 +330,14 @@ SecureBeam/
 - [x] Vollständiger Message-Flow (bind, allocate, claim, open, add, close)
 - [x] Unit Tests (10 Tests)
 
-### Phase 4: Transit
-- [ ] Direct Connection (STUN, Hole-Punching)
-- [ ] Relay Server
-- [ ] Handshake Protokoll
-- [ ] Verbindungsauswahl
+### Phase 4: Transit ✓
+- [x] Direct Connection (TCP mit Hints)
+- [x] Relay Server (Transit Relay implementiert)
+- [x] Handshake Protokoll
+- [x] Verbindungsauswahl (Direct first, Relay fallback)
+- [x] Transit Connection mit NaCl Verschlüsselung
+- [ ] STUN für externe IP (optional)
+- [ ] Hole-Punching (optional)
 
 ### Phase 5: File Transfer
 - [ ] Offer/Answer Protokoll
@@ -382,17 +385,21 @@ SecureBeam/
 
 ## Aktuelle Arbeit
 
-**Status:** Phase 3 abgeschlossen → Phase 4 (Transit)
+**Status:** Phase 4 abgeschlossen → Phase 5 (File Transfer)
 
 **Erledigte Meilensteine:**
 - ✅ Crypto Module mit SPAKE2, NaCl SecretBox, HKDF
 - ✅ Mailbox Server mit vollständigem Protokoll
-- ✅ 22 Unit Tests bestanden
+- ✅ Transit Relay Server implementiert
+- ✅ Core Library Transit Module (direct + relay)
+- ✅ Encrypted Transit Connection
+- ✅ 15 Unit Tests bestanden
 
 **Nächste Schritte:**
-1. Transit Relay Server implementieren
-2. Direct P2P Connection (STUN, Hole-Punching)
-3. File Transfer Protokoll
+1. File Transfer Protokoll (Offer/Answer)
+2. Chunked Transfer mit Progress
+3. GZIP Compression für Textdateien
+4. TAR für Verzeichnisse
 
 ---
 

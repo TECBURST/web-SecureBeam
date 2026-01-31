@@ -8,6 +8,7 @@
 //! - `crypto` - Cryptographic operations (SPAKE2, NaCl SecretBox, HKDF)
 //! - `protocol` - Protocol definitions and message types
 //! - `transfer` - File transfer logic with compression
+//! - `transit` - P2P connection establishment (direct + relay)
 //! - `network` - Network abstractions and WebSocket client
 //!
 //! # Security
@@ -20,6 +21,7 @@
 pub mod crypto;
 pub mod protocol;
 pub mod transfer;
+pub mod transit;
 pub mod network;
 
 // Re-export commonly used types
@@ -30,6 +32,7 @@ pub use crypto::{
 };
 pub use protocol::{Message, TransferRequest, TransferResponse};
 pub use transfer::{FileTransfer, TransferProgress};
+pub use transit::{TransitConnection, TransitRole, TransitHints, establish_transit};
 pub use network::SignalingClient;
 
 /// Library version

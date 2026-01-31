@@ -1,12 +1,12 @@
 version: '3.8'
 
 services:
-  # Signaling Server (Rust Backend)
-  signaling-server:
+  # Mailbox Server (Magic Wormhole Protocol)
+  mailbox-server:
     build:
       context: ./server
       dockerfile: Dockerfile
-    container_name: securebeam-signaling
+    container_name: securebeam-mailbox
     ports:
       - "3030:3030"
     environment:
@@ -21,6 +21,26 @@ services:
       retries: 3
       start_period: 10s
 
+  # Transit Relay Server (P2P fallback when direct connection fails)
+  relay-server:
+    build:
+      context: ./relay-server
+      dockerfile: Dockerfile
+    container_name: securebeam-relay
+    ports:
+      - "4001:4001"
+    environment:
+      - RUST_LOG=info
+      - RELAY_HOST=0.0.0.0
+      - RELAY_PORT=4001
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "4001"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
   # Frontend (Coming Soon Page)
   frontend:
     build:
@@ -30,7 +50,8 @@ services:
     ports:
       - "5173:80"
     depends_on:
-      - signaling-server
+      - mailbox-server
+      - relay-server
     restart: unless-stopped
 
   # Optional: Redis for session storage (uncomment when needed)
