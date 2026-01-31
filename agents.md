@@ -2,184 +2,406 @@
 
 ## Projektübersicht
 
-SecureBeam ist eine P2P-Dateiübertragungslösung ähnlich wie [Magic Wormhole](https://github.com/magic-wormhole/magic-wormhole.rs). Das Ziel ist es, eine einfache und sichere Möglichkeit zu schaffen, Dateien direkt von PC zu PC zu übertragen.
+SecureBeam ist eine P2P-Dateiübertragungslösung basierend auf dem [Magic Wormhole Protokoll](https://github.com/magic-wormhole/magic-wormhole-protocols). Das Ziel ist es, eine einfache und **kryptographisch sichere** Möglichkeit zu schaffen, Dateien direkt von PC zu PC zu übertragen.
 
-### Architektur
+**Sicherheit hat höchste Priorität** - wir orientieren uns streng am bewährten Magic Wormhole Protokoll.
+
+---
+
+## Architektur (Magic Wormhole Style)
 
 ```
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│  Client A       │     │  Signaling       │     │  Client B       │
-│  (Rust/Tauri)   │◄───►│  Server (Rust)   │◄───►│  (Rust/Tauri)   │
-└────────┬────────┘     └──────────────────┘     └────────┬────────┘
-         │                                                 │
-         │              ┌──────────────────┐              │
-         └─────────────►│  P2P Verbindung  │◄─────────────┘
-                        │  (Direkttransfer)│
-                        └──────────────────┘
+┌─────────────────┐                                    ┌─────────────────┐
+│  Client A       │                                    │  Client B       │
+│  (Sender)       │                                    │  (Receiver)     │
+└────────┬────────┘                                    └────────┬────────┘
+         │                                                      │
+         │  1. Allocate Nameplate                              │
+         │  2. Open Mailbox                                    │
+         │  3. PAKE (SPAKE2)          ┌──────────────┐        │
+         │◄────────────────────────────│   Mailbox    │────────►│
+         │                             │   Server     │         │
+         │  4. Exchange Version        │   (Rust)     │         │
+         │  5. Transit Hints           └──────────────┘         │
+         │                                                      │
+         │                                                      │
+         │  6. Direct P2P (wenn möglich)                       │
+         │◄────────────────────────────────────────────────────►│
+         │                                                      │
+         │  7. Relay Fallback          ┌──────────────┐        │
+         │◄────────────────────────────│   Transit    │────────►│
+         │                             │   Relay      │         │
+         │                             └──────────────┘         │
+         │                                                      │
+         │  8. Encrypted File Transfer (NaCl SecretBox)        │
+         └──────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Komponenten
+## Magic Wormhole Protokoll - Unsere Ziele
 
-### 1. Signaling Server (Rust Backend)
+### Mailbox Server Protokoll (Server)
 
-**Zweck:** Vermittelt die initiale Verbindung zwischen zwei Clients (ähnlich Magic Wormhole Mailbox Server)
+Quelle: [server-protocol.md](https://github.com/magic-wormhole/magic-wormhole-protocols/blob/main/server-protocol.md)
 
-**Technologie-Stack:**
-- Rust
-- Tokio (async runtime)
-- Axum oder Actix-Web (Web Framework)
-- WebSocket für Echtzeitkommunikation
-- Redis (optional für Session-Speicherung)
+**Konzepte die wir implementieren müssen:**
+
+| Konzept | Beschreibung | Status |
+|---------|--------------|--------|
+| **AppID** | Eindeutige Anwendungs-ID (z.B. `securebeam.io/file-transfer`) | [ ] |
+| **Nameplates** | Kurze numerische Codes (die "4" in "4-purple-sausages") | [ ] |
+| **Mailboxen** | Speichern Nachrichten mit Phase + Body | [ ] |
+| **Sides** | Hex-String um eigene vs. Partner-Nachrichten zu unterscheiden | [ ] |
+| **Phasen** | Strukturierter Nachrichtenfluss | [ ] |
+
+**Nachrichtenfluss:**
+```
+Client                          Server
+   │                               │
+   │──── bind (appid, side) ──────►│
+   │◄─── welcome ─────────────────│
+   │                               │
+   │──── allocate ────────────────►│  (Sender: bekommt Nameplate)
+   │◄─── allocated ───────────────│
+   │                               │
+   │──── claim (nameplate) ───────►│  (Receiver: claimed Nameplate)
+   │◄─── claimed ─────────────────│
+   │                               │
+   │──── open (mailbox) ──────────►│
+   │◄─── opened ──────────────────│
+   │                               │
+   │──── add (phase, body) ───────►│  (Nachrichten austauschen)
+   │◄─── message ─────────────────│
+   │                               │
+   │──── close ───────────────────►│
+   │◄─── closed ──────────────────│
+```
+
+### Client Protokoll (PAKE & Verschlüsselung)
+
+Quelle: [client-protocol.md](https://github.com/magic-wormhole/magic-wormhole-protocols/blob/main/client-protocol.md)
+
+**Kryptographie-Stack:**
+
+| Komponente | Algorithmus | Zweck |
+|------------|-------------|-------|
+| **PAKE** | SPAKE2 (Ed25519) | Schlüsselaustausch mit Wormhole-Code als Passwort |
+| **KDF** | HKDF-SHA256 | Schlüsselableitung für verschiedene Zwecke |
+| **Verschlüsselung** | NaCl SecretBox (XSalsa20-Poly1305) | Authentifizierte Verschlüsselung |
+| **Verifier** | SHA256 Subkey | Man-in-the-Middle Erkennung |
+
+**Phasen-Ablauf:**
+```
+1. PAKE Phase
+   - Beide Seiten senden SPAKE2 Nachricht
+   - Berechnen gemeinsamen Schlüssel aus Wormhole-Code
+
+2. Version Phase
+   - Erste verschlüsselte Nachricht
+   - Enthält App-Versions-Info
+   - Erfolgreiche Dekryptierung = Vertrauen etabliert
+
+3. Application Phase
+   - App-spezifische verschlüsselte Nachrichten
+   - Für uns: Transit Hints, File Metadata
+```
+
+**Schlüsselableitung:**
+```
+Shared PAKE Key
+      │
+      ├──► HKDF("wormhole:verifier") ──► Verifier (zur MITM-Prüfung)
+      │
+      ├──► HKDF("wormhole:phase:{side_hash}:{phase_hash}") ──► Phase Key
+      │
+      └──► HKDF("transit:key") ──► Transit Encryption Key
+```
+
+### Transit Protokoll (P2P Transfer)
+
+Quelle: [transit.md](https://github.com/magic-wormhole/magic-wormhole-protocols/blob/main/transit.md)
+
+**Verbindungsaufbau (Priorität):**
+
+1. **Direkte Verbindung versuchen**
+   - Lokale IP-Adressen sammeln
+   - STUN für externe IP
+   - Beide Seiten verbinden gleichzeitig (Hole Punching)
+   - `SO_REUSEADDR` für NAT-Traversal
+
+2. **Relay als Fallback**
+   - Wenn direkt nicht möglich
+   - Server leitet verschlüsselte Daten durch
+   - Kein Zugriff auf Klartext
+
+**Handshake:**
+```
+Sender:   "transit sender {hash} ready\n\n"
+Receiver: "transit receiver {hash} ready\n\n"
+```
+
+### Dateitransfer & Compression
+
+Quelle: [file-transfer-protocol.md](https://github.com/magic-wormhole/magic-wormhole-protocols/blob/main/file-transfer-protocol.md)
+
+**Transfer-Ablauf:**
+
+| Schritt | Beschreibung |
+|---------|--------------|
+| 1. Offer | Sender schickt File-Metadata (Name, Größe, Hash) |
+| 2. Answer | Receiver akzeptiert oder lehnt ab |
+| 3. Transfer | Verschlüsselte Chunks über Transit |
+| 4. Verify | Hash-Verifikation am Ende |
+
+**Compression (wichtig!):**
+- **Einzelne Dateien**: Optional GZIP komprimiert
+- **Verzeichnisse**: Als TAR-Archiv (optional GZIP)
+- Compression-Flag in Offer-Nachricht
+- Client entscheidet basierend auf Dateityp
+
+```rust
+// Compression Logik
+if file.is_already_compressed() {
+    // ZIP, MP4, JPG, etc. → keine Compression
+    send_raw(file)
+} else {
+    // TXT, JSON, LOG, etc. → GZIP
+    send_compressed(gzip(file))
+}
+```
+
+---
+
+## Komponenten (Überarbeitet)
+
+### 1. Mailbox Server (Rust)
+
+**Ersetzt unseren bisherigen "Signaling Server"**
 
 **Funktionen:**
-- [ ] Session-Erstellung mit eindeutigem Code
-- [ ] Wormhole-Code Generierung (z.B. "7-crossword-puzzle")
-- [ ] WebSocket-basierte Nachrichtenvermittlung
-- [ ] PAKE (Password-Authenticated Key Exchange) Unterstützung
-- [ ] Session-Timeout und Cleanup
-- [ ] Health-Check Endpunkte
+- [ ] AppID Registrierung und Validierung
+- [ ] Nameplate Allocation (numerisch, kurz)
+- [ ] Mailbox Management (Phasen-basiert)
+- [ ] Side-Tracking für Nachrichtenzuordnung
+- [ ] Nachrichtenspeicherung bis Abruf
+- [ ] Automatische Cleanup abgelaufener Sessions
+- [ ] WebSocket Transport mit JSON Messages
 
-### 2. Native Desktop Clients
+### 2. Transit Relay (Rust)
 
-**Technologie-Stack:**
-- Rust (Core-Logik)
-- Tauri (Desktop Framework für alle Plattformen)
-- React/TypeScript (Frontend UI - bestehendes Frontend nutzen)
+**Neuer Service für Relay-Fallback**
 
-**Unterstützte Plattformen:**
+**Funktionen:**
+- [ ] TCP/WebSocket Relay
+- [ ] Channel-basiertes Routing
+- [ ] Keine Dekryptierung (nur Durchleitung)
+- [ ] Bandbreiten-Limits
+- [ ] Connection Timeout
+
+### 3. Core Library (securebeam-core)
+
+**Module:**
+
+```
+securebeam-core/
+├── crypto/
+│   ├── spake2.rs      # SPAKE2 Implementation
+│   ├── secretbox.rs   # NaCl SecretBox Wrapper
+│   ├── hkdf.rs        # Schlüsselableitung
+│   └── verifier.rs    # MITM-Detection
+│
+├── protocol/
+│   ├── mailbox.rs     # Mailbox Client-Protokoll
+│   ├── transit.rs     # Transit Protokoll
+│   └── messages.rs    # Nachrichtentypen
+│
+├── transfer/
+│   ├── file.rs        # Einzeldatei-Transfer
+│   ├── directory.rs   # Verzeichnis als TAR
+│   ├── compression.rs # GZIP Compression
+│   └── chunking.rs    # Chunk-basierter Transfer
+│
+└── network/
+    ├── direct.rs      # Direkte P2P Verbindung
+    ├── relay.rs       # Relay Fallback
+    ├── stun.rs        # STUN Client
+    └── hints.rs       # Transit Hints Exchange
+```
+
+### 4. Native Clients (Tauri)
+
+**Plattformen:**
 - [ ] Windows (x64)
 - [ ] Linux (x64, AppImage/deb)
 - [ ] macOS (Intel + Apple Silicon)
 
-**Client-Funktionen:**
-- [ ] Datei senden (mit generiertem Code)
-- [ ] Datei empfangen (mit Code-Eingabe)
+**Features:**
+- [ ] Wormhole-Code Generierung & Eingabe
+- [ ] Drag & Drop
 - [ ] Fortschrittsanzeige
-- [ ] Drag & Drop Support
-- [ ] Verschlüsselte Übertragung (E2E)
-- [ ] NAT-Traversal (STUN/TURN)
-- [ ] Direct Connection wenn möglich
-
-### 3. Shared Library (Rust Crate)
-
-**Zweck:** Gemeinsame Logik für alle Clients
-
-**Module:**
-- [ ] `protocol` - Protokolldefinitionen
-- [ ] `crypto` - Verschlüsselung, PAKE
-- [ ] `transfer` - Dateitransfer-Logik
-- [ ] `network` - Netzwerk-Abstraktionen
+- [ ] Verifier-Anzeige (für paranoid mode)
+- [ ] Auto-Compression basierend auf Dateityp
 
 ---
 
-## Projektstruktur
+## Sicherheitsanforderungen
+
+### Kryptographie
+
+| Anforderung | Implementation |
+|-------------|----------------|
+| Schlüsselaustausch | SPAKE2 (nicht selbst implementieren, Crate nutzen!) |
+| Verschlüsselung | NaCl SecretBox via `sodiumoxide` oder `crypto_box` Crate |
+| KDF | HKDF-SHA256 via `hkdf` Crate |
+| Zufallszahlen | `rand` mit `OsRng` |
+
+### Wichtige Sicherheitsregeln
+
+1. **Keine eigene Crypto** - Nur bewährte Crates verwenden
+2. **Constant-Time Vergleiche** - Für alle kryptographischen Vergleiche
+3. **Secure Memory** - Keys nach Verwendung überschreiben
+4. **No Logging of Secrets** - Niemals Schlüssel oder Codes loggen
+5. **Verifier anzeigen** - User können MITM erkennen
+
+---
+
+## Projektstruktur (Aktualisiert)
 
 ```
 SecureBeam/
 ├── agents.md                 # Diese Datei
 ├── docker-compose.yml        # Docker Setup
-├── frontend/                 # Bestehendes Web-Frontend (Coming Soon)
+├── frontend/                 # Web-Frontend (Coming Soon)
 │
-├── server/                   # Signaling Server
+├── mailbox-server/           # Mailbox Server (neu)
 │   ├── Cargo.toml
 │   ├── Dockerfile
 │   └── src/
 │       ├── main.rs
-│       ├── config.rs
-│       ├── handlers/
-│       ├── models/
-│       └── ws/
+│       ├── protocol.rs       # Mailbox Protokoll
+│       ├── nameplate.rs      # Nameplate Management
+│       ├── mailbox.rs        # Mailbox Storage
+│       └── ws.rs             # WebSocket Handler
 │
-├── core/                     # Shared Rust Library
+├── relay-server/             # Transit Relay (neu)
+│   ├── Cargo.toml
+│   ├── Dockerfile
+│   └── src/
+│       ├── main.rs
+│       └── relay.rs
+│
+├── core/                     # Shared Library
 │   ├── Cargo.toml
 │   └── src/
 │       ├── lib.rs
-│       ├── protocol.rs
-│       ├── crypto.rs
-│       ├── transfer.rs
-│       └── network.rs
+│       ├── crypto/
+│       ├── protocol/
+│       ├── transfer/
+│       └── network/
 │
 └── client/                   # Tauri Desktop Client
     ├── Cargo.toml
     ├── tauri.conf.json
-    ├── src/                  # Rust Backend
-    └── ui/                   # Frontend (React)
+    ├── src-tauri/
+    └── src/                  # React Frontend
 ```
 
 ---
 
-## Entwicklungsplan
+## Entwicklungsplan (Überarbeitet)
 
-### Phase 1: Grundgerüst (Aktuell)
+### Phase 1: Protokoll-Fundament ✓ (Teilweise)
+- [x] Projekt-Dokumentation (agents.md)
+- [x] Grundstruktur Server
+- [x] Docker Compose Setup
+- [ ] **Magic Wormhole Protokoll studiert** ← Aktuell
 
-- [x] Projekt-Dokumentation erstellen (agents.md)
-- [ ] Docker Compose Setup
-- [ ] Signaling Server Grundstruktur
-  - [ ] Cargo.toml mit Dependencies
-  - [ ] Basic HTTP Server mit Axum
-  - [ ] WebSocket Endpoint
-  - [ ] Session Management
+### Phase 2: Kryptographie (Nächste)
+- [ ] SPAKE2 Integration (`spake2` Crate)
+- [ ] NaCl SecretBox (`sodiumoxide` oder `crypto_secretbox`)
+- [ ] HKDF Implementation
+- [ ] Unit Tests für Crypto
 
-### Phase 2: Protokoll Implementation
-
-- [ ] Core Library erstellen
-- [ ] Wormhole-Code Generierung
-- [ ] PAKE Implementation (SPAKE2)
-- [ ] Nachrichten-Protokoll definieren
-
-### Phase 3: Signaling Server Fertigstellung
-
-- [ ] Vollständige WebSocket-Kommunikation
-- [ ] Session Lifecycle Management
-- [ ] Error Handling
-- [ ] Logging & Monitoring
-- [ ] Tests
-
-### Phase 4: Desktop Client
-
-- [ ] Tauri Projekt Setup
-- [ ] UI Design & Implementation
-- [ ] Client-Server Kommunikation
-- [ ] P2P Verbindungsaufbau
-- [ ] Dateitransfer
-
-### Phase 5: Plattform-Builds
-
-- [ ] Windows Build & Installer
-- [ ] Linux Build (AppImage, .deb)
-- [ ] macOS Build (Universal Binary)
-
-### Phase 6: Testing & Polish
-
+### Phase 3: Mailbox Server (Protokoll-konform)
+- [ ] Nameplate Allocation
+- [ ] Mailbox mit Phasen
+- [ ] Side-Tracking
+- [ ] Vollständiger Message-Flow
 - [ ] Integration Tests
-- [ ] Performance Optimierung
+
+### Phase 4: Transit
+- [ ] Direct Connection (STUN, Hole-Punching)
+- [ ] Relay Server
+- [ ] Handshake Protokoll
+- [ ] Verbindungsauswahl
+
+### Phase 5: File Transfer
+- [ ] Offer/Answer Protokoll
+- [ ] Chunked Transfer
+- [ ] GZIP Compression
+- [ ] TAR für Verzeichnisse
+- [ ] Hash-Verifikation
+
+### Phase 6: Desktop Client
+- [ ] Tauri Setup
+- [ ] UI Implementation
+- [ ] Integration mit Core Library
+- [ ] Plattform-Builds
+
+### Phase 7: Security Hardening
 - [ ] Security Audit
-- [ ] Dokumentation
+- [ ] Fuzzing
+- [ ] Memory Safety Review
+- [ ] Dependency Audit
 
 ---
 
 ## Referenzen
 
-- [Magic Wormhole Rust](https://github.com/magic-wormhole/magic-wormhole.rs)
-- [Magic Wormhole Protocol Docs](https://magic-wormhole.readthedocs.io/)
+### Protokoll-Dokumentation
+- [Magic Wormhole Protocols](https://github.com/magic-wormhole/magic-wormhole-protocols)
+- [Server Protocol](https://github.com/magic-wormhole/magic-wormhole-protocols/blob/main/server-protocol.md)
+- [Client Protocol](https://github.com/magic-wormhole/magic-wormhole-protocols/blob/main/client-protocol.md)
+- [Transit Protocol](https://github.com/magic-wormhole/magic-wormhole-protocols/blob/main/transit.md)
+- [File Transfer Protocol](https://github.com/magic-wormhole/magic-wormhole-protocols/blob/main/file-transfer-protocol.md)
+
+### Rust Implementation (Referenz)
+- [magic-wormhole.rs](https://github.com/magic-wormhole/magic-wormhole.rs)
+
+### Kryptographie
+- [SPAKE2 RFC Draft](https://tools.ietf.org/html/draft-irtf-cfrg-spake2)
+- [NaCl Crypto Library](https://nacl.cr.yp.to/)
+- [sodiumoxide Crate](https://docs.rs/sodiumoxide)
+- [spake2 Crate](https://docs.rs/spake2)
+
+### Tools
 - [Tauri Framework](https://tauri.app/)
-- [SPAKE2 Protocol](https://tools.ietf.org/html/draft-irtf-cfrg-spake2)
 
 ---
 
 ## Aktuelle Arbeit
 
-**Status:** Phase 1 - Grundgerüst
+**Status:** Phase 1 → Phase 2 Übergang
+
+**Erkenntnisse:**
+- Bisherige Implementierung war zu vereinfacht
+- Müssen streng dem Magic Wormhole Protokoll folgen
+- Kryptographie über bewährte Crates, nicht selbst bauen
 
 **Nächste Schritte:**
-1. Docker Compose erstellen
-2. Signaling Server Grundstruktur aufsetzen
-3. WebSocket Handler implementieren
+1. Server zu "Mailbox Server" umbauen (Nameplate, Phasen, Sides)
+2. Crypto-Module mit echtem SPAKE2 + NaCl SecretBox
+3. Transit Relay Server hinzufügen
 
 ---
 
 ## Commit-Historie
 
 Commits werden regelmäßig erstellt um den Fortschritt zu dokumentieren.
+
+| Commit | Beschreibung |
+|--------|--------------|
+| `014b7d5` | Initial infrastructure (simplified) |
+| `b1c1055` | Clean up compiler warnings |
+| *next* | Update agents.md with protocol details |
