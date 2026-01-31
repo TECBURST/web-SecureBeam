@@ -1,0 +1,84 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply text-neutral-900 bg-neutral-50;
+    @apply dark:text-neutral-100 dark:bg-neutral-950;
+    /* Prevent text selection for native app feel */
+    user-select: none;
+  }
+
+  ::selection {
+    @apply bg-neutral-900 text-white;
+    @apply dark:bg-white dark:text-neutral-900;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center px-6 py-3 text-sm font-semibold rounded-full transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer;
+    @apply dark:focus:ring-offset-neutral-900;
+  }
+
+  .btn-primary {
+    @apply bg-neutral-900 text-white hover:bg-neutral-800 active:bg-neutral-700 focus:ring-neutral-900 shadow-md hover:shadow-lg;
+    @apply dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200 dark:active:bg-neutral-300 dark:focus:ring-white;
+  }
+
+  .btn-secondary {
+    @apply bg-white text-neutral-900 hover:bg-neutral-100 active:bg-neutral-200 focus:ring-neutral-500 border-2 border-neutral-300 shadow-sm;
+    @apply dark:bg-neutral-800 dark:text-white dark:hover:bg-neutral-700 dark:active:bg-neutral-600 dark:border-neutral-600;
+  }
+
+  .btn-outline {
+    @apply border-2 border-neutral-400 text-neutral-800 hover:bg-neutral-100 hover:border-neutral-500 active:bg-neutral-200 focus:ring-neutral-500;
+    @apply dark:border-neutral-600 dark:text-neutral-200 dark:hover:bg-neutral-800 dark:hover:border-neutral-500 dark:active:bg-neutral-700;
+  }
+
+  .card {
+    @apply bg-white rounded-2xl border border-neutral-200 p-8 shadow-sm;
+    @apply dark:bg-neutral-900 dark:border-neutral-800;
+  }
+
+  .input {
+    @apply w-full px-4 py-3 text-base rounded-xl border-2 border-neutral-300 bg-white text-neutral-900 placeholder-neutral-500 focus:ring-2 focus:ring-neutral-900 focus:border-neutral-900 outline-none transition-all;
+    @apply dark:bg-neutral-800 dark:border-neutral-700 dark:text-white dark:placeholder-neutral-400 dark:focus:ring-white dark:focus:border-white;
+    user-select: text;
+  }
+
+  .drop-zone {
+    @apply border-2 border-dashed border-neutral-400 rounded-2xl p-12 transition-all duration-200 cursor-pointer bg-white hover:shadow-lg;
+    @apply dark:border-neutral-600 dark:bg-neutral-900 dark:hover:shadow-neutral-800/50;
+  }
+
+  .drop-zone:hover,
+  .drop-zone.active {
+    @apply border-neutral-900 bg-neutral-100;
+    @apply dark:border-white dark:bg-neutral-800;
+  }
+
+  .code-display {
+    @apply font-mono text-3xl font-semibold tracking-widest text-neutral-900;
+    @apply dark:text-white;
+    user-select: text;
+  }
+
+  /* Progress bar */
+  .progress-bar {
+    @apply h-2 bg-neutral-200 rounded-full overflow-hidden;
+    @apply dark:bg-neutral-800;
+  }
+
+  .progress-bar-fill {
+    @apply h-full bg-neutral-900 rounded-full transition-all duration-300;
+    @apply dark:bg-white;
+  }
+}

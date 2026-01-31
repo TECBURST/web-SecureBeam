@@ -346,11 +346,13 @@ SecureBeam/
 - [x] TAR für Verzeichnisse
 - [x] Hash-Verifikation (SHA-256)
 
-### Phase 6: Desktop Client
-- [ ] Tauri Setup
-- [ ] UI Implementation
-- [ ] Integration mit Core Library
-- [ ] Plattform-Builds
+### Phase 6: Desktop Client ✓
+- [x] Tauri 2.0 Setup
+- [x] Vue.js 3 + TypeScript Frontend
+- [x] Tailwind CSS (gleicher Style wie Web)
+- [x] Integration mit Core Library
+- [x] Send/Receive Views
+- [ ] Plattform-Builds (Windows, Linux, macOS)
 
 ### Phase 7: Security Hardening
 - [ ] Security Audit
@@ -385,7 +387,7 @@ SecureBeam/
 
 ## Aktuelle Arbeit
 
-**Status:** Phase 5 abgeschlossen → Phase 6 (Desktop Client)
+**Status:** Phase 6 abgeschlossen → Phase 7 (Security Hardening)
 
 **Erledigte Meilensteine:**
 - ✅ Crypto Module mit SPAKE2, NaCl SecretBox, HKDF
@@ -396,13 +398,13 @@ SecureBeam/
 - ✅ File Transfer mit Offer/Answer Protokoll
 - ✅ GZIP Compression für Textdateien
 - ✅ TAR für Verzeichnisse
+- ✅ Tauri 2.0 Desktop Client mit Vue.js
 - ✅ 22 Unit Tests bestanden
 
 **Nächste Schritte:**
-1. Tauri Desktop Client Setup
-2. UI Implementation (React)
-3. Integration mit Core Library
-4. Plattform-Builds (Windows, Linux, macOS)
+1. Plattform-Builds erstellen (Windows, Linux, macOS)
+2. Security Audit
+3. End-to-End Integration Tests
 
 ---
 
