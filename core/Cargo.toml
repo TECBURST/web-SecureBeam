@@ -35,8 +35,8 @@ uuid = { version = "1.6", features = ["v4", "serde"] }
 tracing = "0.1"
 
 # File handling
-async-compression = { version = "0.4", features = ["tokio", "gzip"] }
-tokio-util = { version = "0.7", features = ["codec", "io"] }
+flate2 = "1.0"                      # GZIP compression
+tar = "0.4"                         # TAR archive support
 
 [dev-dependencies]
 tokio-test = "0.4"

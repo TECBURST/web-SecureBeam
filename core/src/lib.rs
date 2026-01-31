@@ -30,7 +30,7 @@ pub use crypto::{
     SecretBox, Nonce,
     derive_key, derive_phase_key, derive_verifier, Purpose,
 };
-pub use protocol::{Message, TransferRequest, TransferResponse};
+pub use protocol::{Message, FileOffer, FileAnswer, OfferType};
 pub use transfer::{FileTransfer, TransferProgress};
 pub use transit::{TransitConnection, TransitRole, TransitHints, establish_transit};
 pub use network::SignalingClient;

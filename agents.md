@@ -339,12 +339,12 @@ SecureBeam/
 - [ ] STUN für externe IP (optional)
 - [ ] Hole-Punching (optional)
 
-### Phase 5: File Transfer
-- [ ] Offer/Answer Protokoll
-- [ ] Chunked Transfer
-- [ ] GZIP Compression
-- [ ] TAR für Verzeichnisse
-- [ ] Hash-Verifikation
+### Phase 5: File Transfer ✓
+- [x] Offer/Answer Protokoll (Magic Wormhole kompatibel)
+- [x] Chunked Transfer mit Progress Callback
+- [x] GZIP Compression (automatisch für Textdateien)
+- [x] TAR für Verzeichnisse
+- [x] Hash-Verifikation (SHA-256)
 
 ### Phase 6: Desktop Client
 - [ ] Tauri Setup
@@ -385,7 +385,7 @@ SecureBeam/
 
 ## Aktuelle Arbeit
 
-**Status:** Phase 4 abgeschlossen → Phase 5 (File Transfer)
+**Status:** Phase 5 abgeschlossen → Phase 6 (Desktop Client)
 
 **Erledigte Meilensteine:**
 - ✅ Crypto Module mit SPAKE2, NaCl SecretBox, HKDF
@@ -393,13 +393,16 @@ SecureBeam/
 - ✅ Transit Relay Server implementiert
 - ✅ Core Library Transit Module (direct + relay)
 - ✅ Encrypted Transit Connection
-- ✅ 15 Unit Tests bestanden
+- ✅ File Transfer mit Offer/Answer Protokoll
+- ✅ GZIP Compression für Textdateien
+- ✅ TAR für Verzeichnisse
+- ✅ 22 Unit Tests bestanden
 
 **Nächste Schritte:**
-1. File Transfer Protokoll (Offer/Answer)
-2. Chunked Transfer mit Progress
-3. GZIP Compression für Textdateien
-4. TAR für Verzeichnisse
+1. Tauri Desktop Client Setup
+2. UI Implementation (React)
+3. Integration mit Core Library
+4. Plattform-Builds (Windows, Linux, macOS)
 
 ---
 
