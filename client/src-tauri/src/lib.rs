@@ -3,9 +3,9 @@
 //! Provides commands for the Vue.js frontend to interact with
 //! the SecureBeam core library for P2P file transfers.
 
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
-use rand::Rng;
 
 // Re-export core types we need
 use securebeam_core::FileTransfer;
@@ -39,8 +39,19 @@ fn generate_code() -> Result<String, String> {
     let number: u32 = rng.gen_range(1..1000);
 
     // Word list for human-readable codes (simplified)
-    let adjectives = ["purple", "green", "blue", "red", "orange", "yellow", "silver", "golden"];
-    let nouns = ["sausages", "elephants", "guitars", "planets", "mountains", "rivers", "clouds", "forests"];
+    let adjectives = [
+        "purple", "green", "blue", "red", "orange", "yellow", "silver", "golden",
+    ];
+    let nouns = [
+        "sausages",
+        "elephants",
+        "guitars",
+        "planets",
+        "mountains",
+        "rivers",
+        "clouds",
+        "forests",
+    ];
 
     let adj = adjectives[rng.gen_range(0..adjectives.len())];
     let noun = nouns[rng.gen_range(0..nouns.len())];
@@ -67,7 +78,8 @@ fn parse_code(code: String) -> Result<(String, String), String> {
 async fn prepare_file(path: String) -> Result<FileOfferInfo, String> {
     let transfer = FileTransfer::new();
 
-    let offer = transfer.prepare_file_offer(&path)
+    let offer = transfer
+        .prepare_file_offer(&path)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -83,7 +95,8 @@ async fn prepare_file(path: String) -> Result<FileOfferInfo, String> {
 async fn prepare_directory(path: String) -> Result<FileOfferInfo, String> {
     let transfer = FileTransfer::new();
 
-    let offer = transfer.prepare_directory_offer(&path)
+    let offer = transfer
+        .prepare_directory_offer(&path)
         .await
         .map_err(|e| e.to_string())?;
 
