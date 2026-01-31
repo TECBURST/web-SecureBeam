@@ -158,52 +158,6 @@ jobs:
             client/src-tauri/target/release/bundle/nsis/*.exe
           if-no-files-found: warn
 
-  # Build for macOS (Intel)
-  build-macos-intel:
-    name: Build macOS (Intel)
-    needs: validate
-    runs-on: macos-13
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install Yarn
-        run: npm install -g yarn
-
-      - name: Cache cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            client/src-tauri/target/
-          key: ${{ runner.os }}-cargo-release-intel-${{ hashFiles('client/src-tauri/Cargo.lock') }}
-
-      - name: Install frontend dependencies
-        working-directory: client
-        run: yarn install --frozen-lockfile
-
-      - name: Build Tauri
-        working-directory: client
-        run: yarn tauri build
-
-      - name: Upload macOS Intel artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-intel-builds
-          path: |
-            client/src-tauri/target/release/bundle/dmg/*.dmg
-          if-no-files-found: warn
-
   # Build for macOS (Apple Silicon)
   build-macos-arm:
     name: Build macOS (Apple Silicon)
@@ -255,7 +209,7 @@ jobs:
   # Create GitHub Release
   create-release:
     name: Create Release
-    needs: [validate, build-linux, build-windows, build-macos-intel, build-macos-arm]
+    needs: [validate, build-linux, build-windows, build-macos-arm]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -298,7 +252,6 @@ jobs:
             | **Linux (Debian/Ubuntu)** | `.deb` | x64 |
             | **Linux (Fedora/RHEL)** | `.rpm` | x64 |
             | **Linux (Universal)** | `.AppImage` | x64 |
-            | **macOS** | `.dmg` | Intel (x64) |
             | **macOS** | `.dmg` | Apple Silicon (ARM64) |
 
             ### Security
