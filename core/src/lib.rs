@@ -1,21 +1,34 @@
 //! SecureBeam Core Library
 //!
-//! This library provides the core functionality for SecureBeam P2P file transfers.
+//! This library provides the core functionality for SecureBeam P2P file transfers,
+//! implementing the Magic Wormhole protocol for secure, authenticated file sharing.
 //!
 //! # Modules
 //!
+//! - `crypto` - Cryptographic operations (SPAKE2, NaCl SecretBox, HKDF)
 //! - `protocol` - Protocol definitions and message types
-//! - `crypto` - Cryptographic operations (PAKE, encryption)
-//! - `transfer` - File transfer logic
+//! - `transfer` - File transfer logic with compression
 //! - `network` - Network abstractions and WebSocket client
+//!
+//! # Security
+//!
+//! This library implements the Magic Wormhole protocol:
+//! - SPAKE2 for password-authenticated key exchange
+//! - NaCl SecretBox (XSalsa20-Poly1305) for authenticated encryption
+//! - HKDF-SHA256 for key derivation
 
-pub mod protocol;
 pub mod crypto;
+pub mod protocol;
 pub mod transfer;
 pub mod network;
 
+// Re-export commonly used types
+pub use crypto::{
+    Spake2Exchange, Spake2Message,
+    SecretBox, Nonce,
+    derive_key, derive_phase_key, derive_verifier, Purpose,
+};
 pub use protocol::{Message, TransferRequest, TransferResponse};
-pub use crypto::{KeyExchange, SessionKey};
 pub use transfer::{FileTransfer, TransferProgress};
 pub use network::SignalingClient;
 
@@ -51,4 +64,10 @@ pub enum Error {
 
     #[error("Peer disconnected")]
     PeerDisconnected,
+
+    #[error("Wrong wormhole code")]
+    WrongCode,
+
+    #[error("MITM attack detected")]
+    MitmDetected,
 }
