@@ -334,14 +334,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Get lowercase repository owner
+        id: repo
+        run: echo "owner=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
       - name: Build and push Mailbox Server
         uses: docker/build-push-action@v5
         with:
           context: ./server
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}/mailbox-server:${{ needs.validate.outputs.version }}
-            ghcr.io/${{ github.repository }}/mailbox-server:latest
+            ghcr.io/${{ steps.repo.outputs.owner }}/securebeam-mailbox:${{ needs.validate.outputs.version }}
+            ghcr.io/${{ steps.repo.outputs.owner }}/securebeam-mailbox:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -351,7 +355,7 @@ jobs:
           context: ./relay-server
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}/relay-server:${{ needs.validate.outputs.version }}
-            ghcr.io/${{ github.repository }}/relay-server:latest
+            ghcr.io/${{ steps.repo.outputs.owner }}/securebeam-relay:${{ needs.validate.outputs.version }}
+            ghcr.io/${{ steps.repo.outputs.owner }}/securebeam-relay:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
