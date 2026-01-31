@@ -1,0 +1,18 @@
+use axum::Json;
+use serde::Serialize;
+
+#[derive(Serialize)]
+pub struct HealthResponse {
+    status: String,
+    service: String,
+    version: String,
+}
+
+/// Health check endpoint
+pub async fn health_check() -> Json<HealthResponse> {
+    Json(HealthResponse {
+        status: "ok".to_string(),
+        service: "securebeam-signaling".to_string(),
+        version: env!("CARGO_PKG_VERSION").to_string(),
+    })
+}

@@ -41,3 +41,12 @@ temp/
 # Go
 *.test
 *.out
+
+# Rust
+target/
+Cargo.lock
+**/*.rs.bk
+*.pdb
+
+# Docker
+.docker/

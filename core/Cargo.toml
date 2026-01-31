@@ -1,0 +1,40 @@
+[package]
+name = "securebeam-core"
+version = "0.1.0"
+edition = "2021"
+authors = ["SecureBeam Team"]
+description = "Core library for SecureBeam P2P file transfer"
+license = "MIT"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1.35", features = ["full"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Cryptography
+rand = "0.8"
+sha2 = "0.10"
+spake2 = "0.4"
+
+# Networking
+tokio-tungstenite = { version = "0.21", features = ["native-tls"] }
+futures = "0.3"
+
+# Utilities
+thiserror = "1.0"
+uuid = { version = "1.6", features = ["v4", "serde"] }
+tracing = "0.1"
+
+# File handling
+async-compression = { version = "0.4", features = ["tokio", "gzip"] }
+tokio-util = { version = "0.7", features = ["codec", "io"] }
+
+[dev-dependencies]
+tokio-test = "0.4"
+
+[lib]
+name = "securebeam_core"
+path = "src/lib.rs"
