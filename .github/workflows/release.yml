@@ -319,7 +319,7 @@ jobs:
 
   create-release:
     name: Create Release
-    needs: [validate, build-linux, build-windows, build-macos-arm]
+    needs: [validate, build-linux, build-windows, build-macos-arm, build-docker]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -369,7 +369,7 @@ jobs:
 
   deploy:
     name: Deploy to Server
-    needs: [validate, build-docker]
+    needs: [validate, build-linux, build-windows, build-macos-arm, build-docker, create-release]
     runs-on: ubuntu-latest
     steps:
       - name: Deploy to Production
