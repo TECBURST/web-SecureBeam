@@ -259,8 +259,40 @@ jobs:
             client/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
           if-no-files-found: warn
 
-  build-docker:
-    name: Build Docker Images
+  build-docker-frontend:
+    name: Build Docker (Frontend)
+    needs: [validate, lint]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get lowercase repository owner
+        id: repo
+        run: echo "owner=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
+      - name: Build and push Frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: true
+          tags: |
+            ghcr.io/${{ steps.repo.outputs.owner }}/securebeam-frontend:${{ needs.validate.outputs.version }}
+            ghcr.io/${{ steps.repo.outputs.owner }}/securebeam-frontend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  build-docker-mailbox:
+    name: Build Docker (Mailbox Server)
     needs: [validate, lint]
     runs-on: ubuntu-latest
     steps:
@@ -291,6 +323,27 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  build-docker-relay:
+    name: Build Docker (Relay Server)
+    needs: [validate, lint]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get lowercase repository owner
+        id: repo
+        run: echo "owner=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
       - name: Build and push Relay Server
         uses: docker/build-push-action@v5
         with:
@@ -302,24 +355,13 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Build and push Frontend
-        uses: docker/build-push-action@v5
-        with:
-          context: ./frontend
-          push: true
-          tags: |
-            ghcr.io/${{ steps.repo.outputs.owner }}/securebeam-frontend:${{ needs.validate.outputs.version }}
-            ghcr.io/${{ steps.repo.outputs.owner }}/securebeam-frontend:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
   # ============================================
   # STAGE 3: Release & Deploy (only if builds pass)
   # ============================================
 
   create-release:
     name: Create Release
-    needs: [validate, build-linux, build-windows, build-macos-arm, build-docker]
+    needs: [validate, build-linux, build-windows, build-macos-arm, build-docker-frontend, build-docker-mailbox, build-docker-relay]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -369,7 +411,7 @@ jobs:
 
   deploy:
     name: Deploy to Server
-    needs: [validate, build-linux, build-windows, build-macos-arm, build-docker, create-release]
+    needs: [validate, build-linux, build-windows, build-macos-arm, build-docker-frontend, build-docker-mailbox, build-docker-relay, create-release]
     runs-on: ubuntu-latest
     steps:
       - name: Deploy to Production

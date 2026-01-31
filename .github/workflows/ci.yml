@@ -241,8 +241,27 @@ jobs:
         run: yarn tauri build --debug
 
   # Build Docker images (without pushing) to verify they work
-  build-docker:
-    name: Build Docker Images
+  build-docker-frontend:
+    name: Build Docker (Frontend)
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Frontend Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: false
+          tags: securebeam-frontend:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  build-docker-mailbox:
+    name: Build Docker (Mailbox Server)
     needs: lint
     runs-on: ubuntu-latest
     steps:
@@ -260,21 +279,22 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  build-docker-relay:
+    name: Build Docker (Relay Server)
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Build Relay Server Image
         uses: docker/build-push-action@v5
         with:
           context: ./relay-server
           push: false
           tags: securebeam-relay:test
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build Frontend Image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./frontend
-          push: false
-          tags: securebeam-frontend:test
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
