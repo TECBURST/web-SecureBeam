@@ -1,8 +1,12 @@
+//! WebSocket handler for the Mailbox Server
+//!
+//! Implements the Magic Wormhole server protocol over WebSocket.
+
 use std::sync::Arc;
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
-        Path, State,
+        State,
     },
     response::IntoResponse,
 };
@@ -10,70 +14,34 @@ use futures::{sink::SinkExt, stream::StreamExt};
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
-use crate::models::{AppState, ClientMessage, ServerMessage};
+use crate::models::{AppState, ClientMessage, ServerMessage, NameplateInfo};
 
 /// WebSocket upgrade handler
 pub async fn ws_handler(
     ws: WebSocketUpgrade,
-    Path(code): Path<String>,
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| handle_socket(socket, code, state))
+    ws.on_upgrade(move |socket| handle_socket(socket, state))
 }
 
-/// Handle WebSocket connection
-async fn handle_socket(socket: WebSocket, code: String, state: Arc<AppState>) {
-    // Check if session exists and is valid
-    match state.get_session(&code).await {
-        Some(s) if !s.is_expired() && s.can_connect() => {},
-        Some(_) => {
-            tracing::warn!("Session {} is expired or full", code);
-            return;
-        }
-        None => {
-            tracing::warn!("Session {} not found", code);
-            return;
-        }
-    };
-
-    tracing::info!("WebSocket connection for session: {}", code);
+/// Handle a WebSocket connection
+async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
+    let (mut sender, mut receiver) = socket.split();
 
     // Create channel for outgoing messages
     let (tx, mut rx) = mpsc::unbounded_channel::<String>();
 
     // Register client
-    let client_id = match state.register_client(&code, tx).await {
-        Some(id) => id,
-        None => {
-            tracing::error!("Failed to register client for session: {}", code);
-            return;
-        }
-    };
+    let client_id = state.register_client(tx.clone()).await;
+    tracing::info!("Client {} connected", client_id);
 
-    tracing::info!("Client {} connected to session {}", client_id, code);
-
-    // Split socket
-    let (mut sender, mut receiver) = socket.split();
-
-    // Send connected message
-    let peer_count = state.get_client_count(&code).await as u8;
-    let connected_msg = ServerMessage::Connected {
-        client_id: client_id.to_string(),
-        peer_count,
-    };
-    if sender
-        .send(Message::Text(connected_msg.to_json().into()))
-        .await
-        .is_err()
-    {
-        tracing::error!("Failed to send connected message");
-        state.unregister_client(&code, client_id).await;
+    // Send welcome message
+    let welcome = ServerMessage::welcome();
+    if sender.send(Message::Text(welcome.to_json().into())).await.is_err() {
+        tracing::error!("Failed to send welcome message");
+        state.unregister_client(client_id).await;
         return;
     }
-
-    // Notify other clients about new peer
-    let peer_joined_msg = ServerMessage::PeerJoined { peer_count };
-    state.broadcast(&code, client_id, &peer_joined_msg.to_json()).await;
 
     // Spawn task to forward outgoing messages
     let send_task = tokio::spawn(async move {
@@ -86,19 +54,25 @@ async fn handle_socket(socket: WebSocket, code: String, state: Arc<AppState>) {
 
     // Handle incoming messages
     let state_clone = state.clone();
-    let code_clone2 = code.clone();
     let recv_task = tokio::spawn(async move {
         while let Some(result) = receiver.next().await {
             match result {
                 Ok(Message::Text(text)) => {
-                    handle_message(&state_clone, &code_clone2, client_id, &text).await;
+                    if let Err(e) = handle_message(&state_clone, client_id, &text).await {
+                        tracing::warn!("Error handling message: {}", e);
+                        // Send error response
+                        if let Some(sender) = state_clone.get_client_sender(client_id).await {
+                            let error = ServerMessage::error(&e, None);
+                            let _ = sender.send(error.to_json());
+                        }
+                    }
                 }
                 Ok(Message::Close(_)) => {
                     tracing::info!("Client {} closed connection", client_id);
                     break;
                 }
                 Err(e) => {
-                    tracing::error!("WebSocket error: {}", e);
+                    tracing::error!("WebSocket error for client {}: {}", client_id, e);
                     break;
                 }
                 _ => {}
@@ -108,50 +82,164 @@ async fn handle_socket(socket: WebSocket, code: String, state: Arc<AppState>) {
 
     // Wait for either task to complete
     tokio::select! {
-        _ = send_task => tracing::debug!("Send task ended"),
-        _ = recv_task => tracing::debug!("Receive task ended"),
+        _ = send_task => tracing::debug!("Send task ended for client {}", client_id),
+        _ = recv_task => tracing::debug!("Receive task ended for client {}", client_id),
     }
 
     // Cleanup
-    state.unregister_client(&code, client_id).await;
-
-    // Notify remaining clients
-    let peer_count = state.get_client_count(&code).await as u8;
-    let peer_left_msg = ServerMessage::PeerLeft { peer_count };
-    state.broadcast(&code, client_id, &peer_left_msg.to_json()).await;
-
-    tracing::info!("Client {} disconnected from session {}", client_id, code);
+    state.unregister_client(client_id).await;
+    tracing::info!("Client {} disconnected", client_id);
 }
 
-/// Handle incoming WebSocket message
-async fn handle_message(state: &Arc<AppState>, code: &str, client_id: Uuid, text: &str) {
-    let message: ClientMessage = match serde_json::from_str(text) {
-        Ok(msg) => msg,
-        Err(e) => {
-            tracing::warn!("Invalid message from client {}: {}", client_id, e);
-            let error_msg = ServerMessage::Error {
-                code: "invalid_message".to_string(),
-                message: "Failed to parse message".to_string(),
-            };
-            state.send_to_client(code, client_id, &error_msg.to_json()).await;
-            return;
-        }
-    };
+/// Handle an incoming message
+async fn handle_message(
+    state: &Arc<AppState>,
+    client_id: Uuid,
+    text: &str,
+) -> Result<(), String> {
+    let message: ClientMessage = serde_json::from_str(text)
+        .map_err(|e| format!("Invalid message format: {}", e))?;
+
+    let sender = state.get_client_sender(client_id).await
+        .ok_or("Client not found")?;
 
     match message {
-        ClientMessage::Signal { data } => {
-            tracing::debug!("Forwarding signal from client {}", client_id);
-            let forward_msg = ServerMessage::Signal { data };
-            state.broadcast(code, client_id, &forward_msg.to_json()).await;
+        ClientMessage::Bind { appid, side } => {
+            state.bind_client(client_id, appid.clone(), side.clone()).await;
+            tracing::debug!("Client {} bound to app {} as side {}", client_id, appid, side);
+
+            // Send ack
+            let ack = ServerMessage::Ack;
+            let _ = sender.send(ack.to_json());
         }
-        ClientMessage::Pake { message } => {
-            tracing::debug!("Forwarding PAKE message from client {}", client_id);
-            let forward_msg = ServerMessage::Pake { message };
-            state.broadcast(code, client_id, &forward_msg.to_json()).await;
+
+        ClientMessage::List => {
+            let appid = state.get_client_appid(client_id).await
+                .ok_or("Not bound")?;
+
+            let nameplates = state.list_nameplates(&appid).await;
+            let response = ServerMessage::Nameplates {
+                nameplates: nameplates.into_iter().map(|id| NameplateInfo { id }).collect(),
+            };
+            let _ = sender.send(response.to_json());
         }
-        ClientMessage::Ping => {
-            let pong_msg = ServerMessage::Pong;
-            state.send_to_client(code, client_id, &pong_msg.to_json()).await;
+
+        ClientMessage::Allocate => {
+            let appid = state.get_client_appid(client_id).await
+                .ok_or("Not bound")?;
+
+            let nameplate = state.allocate_nameplate(&appid).await;
+            let response = ServerMessage::Allocated { nameplate };
+            let _ = sender.send(response.to_json());
+        }
+
+        ClientMessage::Claim { nameplate } => {
+            let appid = state.get_client_appid(client_id).await
+                .ok_or("Not bound")?;
+            let side = state.get_client_side(client_id).await
+                .ok_or("Not bound")?;
+
+            let mailbox_id = state.claim_nameplate(&nameplate, &side, &appid).await
+                .ok_or("Failed to claim nameplate")?;
+
+            let response = ServerMessage::Claimed { mailbox: mailbox_id };
+            let _ = sender.send(response.to_json());
+        }
+
+        ClientMessage::Release { nameplate } => {
+            let side = state.get_client_side(client_id).await
+                .ok_or("Not bound")?;
+
+            if let Some(np) = nameplate {
+                state.release_nameplate(&np, &side).await;
+            }
+
+            let response = ServerMessage::Released;
+            let _ = sender.send(response.to_json());
+        }
+
+        ClientMessage::Open { mailbox } => {
+            let side = state.get_client_side(client_id).await
+                .ok_or("Not bound")?;
+
+            if !state.open_mailbox(&mailbox, &side).await {
+                return Err("Failed to open mailbox".to_string());
+            }
+
+            state.set_client_mailbox(client_id, mailbox.clone()).await;
+
+            // Send ack
+            let ack = ServerMessage::Ack;
+            let _ = sender.send(ack.to_json());
+
+            // Send any existing messages
+            let messages = state.get_all_messages(&mailbox).await;
+            for msg in messages {
+                if msg.side != side {
+                    let response = ServerMessage::Message {
+                        side: msg.side.clone(),
+                        phase: msg.phase.clone(),
+                        body: msg.body.clone(),
+                        id: msg.id,
+                    };
+                    let _ = sender.send(response.to_json());
+                }
+            }
+        }
+
+        ClientMessage::Add { phase, body } => {
+            let side = state.get_client_side(client_id).await
+                .ok_or("Not bound")?;
+
+            // Get mailbox ID from client connection
+            let clients = state.clients.read().await;
+            let mailbox_id = clients.get(&client_id)
+                .and_then(|c| c.mailbox_id.clone())
+                .ok_or("No mailbox open")?;
+            drop(clients);
+
+            let msg = state.add_message(&mailbox_id, &side, &phase, &body).await
+                .ok_or("Failed to add message")?;
+
+            // Send ack to sender
+            let ack = ServerMessage::Ack;
+            let _ = sender.send(ack.to_json());
+
+            // Broadcast message to other clients in the mailbox
+            let broadcast = ServerMessage::Message {
+                side: msg.side,
+                phase: msg.phase,
+                body: msg.body,
+                id: msg.id,
+            };
+            state.broadcast_to_mailbox(&mailbox_id, &side, &broadcast.to_json()).await;
+        }
+
+        ClientMessage::Close { mailbox, mood: _ } => {
+            let side = state.get_client_side(client_id).await
+                .ok_or("Not bound")?;
+
+            // Get mailbox ID
+            let mailbox_id = if let Some(mb) = mailbox {
+                mb
+            } else {
+                let clients = state.clients.read().await;
+                clients.get(&client_id)
+                    .and_then(|c| c.mailbox_id.clone())
+                    .ok_or("No mailbox to close")?
+            };
+
+            state.close_mailbox(&mailbox_id, &side).await;
+
+            let response = ServerMessage::Closed;
+            let _ = sender.send(response.to_json());
+        }
+
+        ClientMessage::Ping { ping } => {
+            let response = ServerMessage::Pong { pong: ping };
+            let _ = sender.send(response.to_json());
         }
     }
+
+    Ok(())
 }

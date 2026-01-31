@@ -1,3 +1,7 @@
+//! SecureBeam Mailbox Server
+//!
+//! Implements the Magic Wormhole server protocol for P2P file transfer signaling.
+
 mod config;
 mod handlers;
 mod models;
@@ -14,7 +18,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::config::Config;
 use crate::models::AppState;
-use crate::handlers::{health_check, create_session, get_session_info};
+use crate::handlers::health_check;
 use crate::ws::ws_handler;
 
 #[tokio::main]
@@ -31,13 +35,13 @@ async fn main() {
     // Load configuration
     let config = Config::from_env();
 
-    tracing::info!("Starting SecureBeam Signaling Server");
+    tracing::info!("Starting SecureBeam Mailbox Server v{}", env!("CARGO_PKG_VERSION"));
     tracing::info!("Listening on {}:{}", config.host, config.port);
 
     // Create shared state
     let state = Arc::new(AppState::new(config.session_timeout_secs));
 
-    // Spawn cleanup task for expired sessions
+    // Spawn cleanup task for expired nameplates and mailboxes
     let cleanup_state = state.clone();
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
@@ -51,11 +55,8 @@ async fn main() {
     let app = Router::new()
         // Health check endpoint
         .route("/health", get(health_check))
-        // Session management
-        .route("/api/sessions", axum::routing::post(create_session))
-        .route("/api/sessions/{code}", get(get_session_info))
-        // WebSocket endpoint for signaling
-        .route("/ws/{code}", get(ws_handler))
+        // WebSocket endpoint for mailbox protocol
+        .route("/v1", get(ws_handler))
         // Add middleware
         .layer(TraceLayer::new_for_http())
         .layer(
@@ -70,7 +71,7 @@ async fn main() {
     let addr = format!("{}:{}", config.host, config.port);
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
 
-    tracing::info!("Server ready at http://{}", addr);
+    tracing::info!("Mailbox server ready at ws://{}/v1", addr);
 
     // Run server
     axum::serve(listener, app).await.unwrap();
