@@ -1,14 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-/// WebSocket message wrapper
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", content = "data")]
-#[serde(rename_all = "snake_case")]
-pub enum WsMessage {
-    Client(ClientMessage),
-    Server(ServerMessage),
-}
-
 /// Messages from client to server
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "action", content = "payload")]

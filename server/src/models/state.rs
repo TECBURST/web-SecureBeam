@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
 use uuid::Uuid;
 
@@ -22,13 +21,16 @@ pub struct AppState {
     pub sessions: RwLock<HashMap<String, Session>>,
     /// Connected clients per session code
     pub clients: RwLock<HashMap<String, Vec<ConnectedClient>>>,
+    /// Default session timeout in seconds
+    pub session_timeout_secs: u64,
 }
 
 impl AppState {
-    pub fn new() -> Self {
+    pub fn new(session_timeout_secs: u64) -> Self {
         Self {
             sessions: RwLock::new(HashMap::new()),
             clients: RwLock::new(HashMap::new()),
+            session_timeout_secs,
         }
     }
 
@@ -152,6 +154,6 @@ impl AppState {
 
 impl Default for AppState {
     fn default() -> Self {
-        Self::new()
+        Self::new(300) // 5 minutes default
     }
 }

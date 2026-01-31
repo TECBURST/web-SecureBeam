@@ -48,7 +48,7 @@ pub async fn create_session(
 ) -> Result<Json<CreateSessionResponse>, (StatusCode, String)> {
     let timeout_secs = request
         .and_then(|r| r.timeout_secs)
-        .unwrap_or(300); // 5 minutes default
+        .unwrap_or(state.session_timeout_secs);
 
     // Generate unique code
     let code = loop {

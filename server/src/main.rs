@@ -35,7 +35,17 @@ async fn main() {
     tracing::info!("Listening on {}:{}", config.host, config.port);
 
     // Create shared state
-    let state = Arc::new(AppState::new());
+    let state = Arc::new(AppState::new(config.session_timeout_secs));
+
+    // Spawn cleanup task for expired sessions
+    let cleanup_state = state.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+        loop {
+            interval.tick().await;
+            cleanup_state.cleanup_expired().await;
+        }
+    });
 
     // Build router
     let app = Router::new()

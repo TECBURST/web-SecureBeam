@@ -23,9 +23,9 @@ pub async fn ws_handler(
 
 /// Handle WebSocket connection
 async fn handle_socket(socket: WebSocket, code: String, state: Arc<AppState>) {
-    // Check if session exists
-    let session = match state.get_session(&code).await {
-        Some(s) if !s.is_expired() && s.can_connect() => s,
+    // Check if session exists and is valid
+    match state.get_session(&code).await {
+        Some(s) if !s.is_expired() && s.can_connect() => {},
         Some(_) => {
             tracing::warn!("Session {} is expired or full", code);
             return;
@@ -76,7 +76,6 @@ async fn handle_socket(socket: WebSocket, code: String, state: Arc<AppState>) {
     state.broadcast(&code, client_id, &peer_joined_msg.to_json()).await;
 
     // Spawn task to forward outgoing messages
-    let code_clone = code.clone();
     let send_task = tokio::spawn(async move {
         while let Some(msg) = rx.recv().await {
             if sender.send(Message::Text(msg.into())).await.is_err() {
