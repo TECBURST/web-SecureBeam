@@ -1,6 +1,6 @@
 [package]
 name = "securebeam-client"
-version = "0.1.0"
+version = "1.0.0"
 description = "SecureBeam - Secure P2P File Transfer"
 authors = ["SecureBeam Team"]
 edition = "2021"
