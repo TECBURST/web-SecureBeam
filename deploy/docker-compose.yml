@@ -1,0 +1,63 @@
+version: '3.8'
+
+# SecureBeam Production Deployment
+# Auto-deployed via GitHub Actions on new releases
+# Server: 159.195.74.237
+
+services:
+  # Frontend (Coming Soon Page)
+  frontend:
+    image: ghcr.io/tecburst/securebeam-frontend:${VERSION:-latest}
+    container_name: securebeam-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - mailbox-server
+      - relay-server
+    networks:
+      - securebeam
+
+  # Mailbox Server (Magic Wormhole Protocol)
+  mailbox-server:
+    image: ghcr.io/tecburst/securebeam-mailbox:${VERSION:-latest}
+    container_name: securebeam-mailbox
+    restart: unless-stopped
+    ports:
+      - "3030:3030"
+    environment:
+      - RUST_LOG=info
+      - SERVER_HOST=0.0.0.0
+      - SERVER_PORT=3030
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3030/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - securebeam
+
+  # Transit Relay Server (P2P fallback)
+  relay-server:
+    image: ghcr.io/tecburst/securebeam-relay:${VERSION:-latest}
+    container_name: securebeam-relay
+    restart: unless-stopped
+    ports:
+      - "4001:4001"
+    environment:
+      - RUST_LOG=info
+      - RELAY_HOST=0.0.0.0
+      - RELAY_PORT=4001
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "4001"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - securebeam
+
+networks:
+  securebeam:
+    driver: bridge
