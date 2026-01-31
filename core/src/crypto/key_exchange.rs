@@ -2,8 +2,13 @@
 //!
 //! Implements the key exchange protocol as specified in the Magic Wormhole client protocol.
 //! Both sides use the wormhole code as the password to derive a shared secret.
+//!
+//! Security features:
+//! - Passwords and shared keys are securely zeroed on drop
+//! - State machine prevents key reuse
 
 use spake2::{Ed25519Group, Identity, Password, Spake2};
+use zeroize::Zeroizing;
 use crate::{Error, Result};
 
 /// SPAKE2 message to be exchanged between peers
@@ -32,7 +37,7 @@ pub struct Spake2Exchange {
 enum ExchangeState {
     /// Ready to start exchange
     Ready {
-        password: Vec<u8>,
+        password: Zeroizing<Vec<u8>>,
         side: Side,
     },
     /// Waiting for peer's SPAKE2 message
@@ -42,7 +47,7 @@ enum ExchangeState {
     },
     /// Exchange completed successfully
     Completed {
-        shared_key: Vec<u8>,
+        shared_key: Zeroizing<Vec<u8>>,
     },
     /// Exchange failed
     Failed,
@@ -62,10 +67,11 @@ impl Spake2Exchange {
     ///
     /// The password should be the full wormhole code (e.g., "4-purple-sausages").
     /// The side determines the identity used in SPAKE2.
+    /// The password is stored in zeroizing memory and cleared on drop.
     pub fn new(password: &[u8], side: Side) -> Self {
         Self {
             state: ExchangeState::Ready {
-                password: password.to_vec(),
+                password: Zeroizing::new(password.to_vec()),
                 side,
             },
         }
@@ -110,7 +116,7 @@ impl Spake2Exchange {
 
     /// Complete the key exchange with the peer's message
     ///
-    /// Returns the shared key on success.
+    /// Returns the shared key on success. The key is stored in zeroizing memory.
     pub fn finish(&mut self, peer_message: &Spake2Message) -> Result<Vec<u8>> {
         let spake = match std::mem::replace(&mut self.state, ExchangeState::Failed) {
             ExchangeState::WaitingForPeer { spake, .. } => spake,
@@ -121,13 +127,14 @@ impl Spake2Exchange {
             .finish(&peer_message.0)
             .map_err(|_| Error::Crypto("SPAKE2 verification failed - wrong code?".to_string()))?;
 
-        let key = shared_key.to_vec();
+        let key = Zeroizing::new(shared_key.to_vec());
+        let result = key.to_vec();
 
         self.state = ExchangeState::Completed {
-            shared_key: key.clone(),
+            shared_key: key,
         };
 
-        Ok(key)
+        Ok(result)
     }
 
     /// Check if the exchange is complete
@@ -138,7 +145,7 @@ impl Spake2Exchange {
     /// Get the shared key if exchange is complete
     pub fn shared_key(&self) -> Option<&[u8]> {
         match &self.state {
-            ExchangeState::Completed { shared_key } => Some(shared_key),
+            ExchangeState::Completed { shared_key } => Some(shared_key.as_slice()),
             _ => None,
         }
     }

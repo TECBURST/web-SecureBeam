@@ -2,6 +2,11 @@
 //!
 //! This implements the encryption used by Magic Wormhole for all encrypted
 //! messages after the PAKE exchange.
+//!
+//! Security features:
+//! - Keys are securely zeroed on drop using zeroize
+//! - Constant-time comparisons for sensitive data
+//! - Random nonce generation for each encryption
 
 use xsalsa20poly1305::{
     aead::{Aead, KeyInit},
@@ -9,6 +14,7 @@ use xsalsa20poly1305::{
 };
 use rand::RngCore;
 use subtle::ConstantTimeEq;
+use zeroize::ZeroizeOnDrop;
 
 use crate::{Error, Result};
 
@@ -49,7 +55,11 @@ impl Nonce {
 }
 
 /// NaCl SecretBox for authenticated encryption
+///
+/// The key is automatically zeroed when this struct is dropped.
+#[derive(ZeroizeOnDrop)]
 pub struct SecretBox {
+    #[zeroize(skip)]
     cipher: XSalsa20Poly1305,
     key: [u8; KEY_SIZE],
 }
@@ -123,12 +133,7 @@ impl SecretBox {
     }
 }
 
-impl Drop for SecretBox {
-    fn drop(&mut self) {
-        // Securely zero the key when dropped
-        self.key.iter_mut().for_each(|b| *b = 0);
-    }
-}
+// Note: Key zeroing is handled automatically by ZeroizeOnDrop derive
 
 /// Constant-time comparison of two byte slices
 pub fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {

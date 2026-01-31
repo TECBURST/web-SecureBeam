@@ -21,6 +21,7 @@ spake2 = "0.4"
 hkdf = "0.12"                    # Key derivation
 xsalsa20poly1305 = "0.9"         # NaCl SecretBox
 subtle = "2.5"                   # Constant-time operations
+zeroize = { version = "1.7", features = ["derive"] }  # Secure memory clearing
 hex = "0.4"                      # Hex encoding
 base64 = "0.21"                  # Base64 encoding
 

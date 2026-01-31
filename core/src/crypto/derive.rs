@@ -2,9 +2,12 @@
 //!
 //! Implements the key derivation as specified in the Magic Wormhole client protocol.
 //! Different keys are derived for different purposes using HKDF with specific info strings.
+//!
+//! Security: Derived keys should be wrapped in Zeroizing when stored long-term.
 
 use hkdf::Hkdf;
 use sha2::Sha256;
+use zeroize::Zeroize;
 
 use crate::Result;
 use super::KEY_SIZE;
@@ -44,14 +47,20 @@ impl Purpose {
 /// - `shared_key`: The shared secret from SPAKE2
 /// - `purpose`: The purpose/context for this key
 /// - `length`: Desired output key length (default: 32 bytes)
+///
+/// Note: The caller is responsible for zeroizing the returned key when done.
 pub fn derive_key(shared_key: &[u8], purpose: &Purpose, length: usize) -> Result<Vec<u8>> {
     let hkdf = Hkdf::<Sha256>::new(None, shared_key);
-    let info = purpose.to_info();
+    let mut info = purpose.to_info();
 
     let mut output = vec![0u8; length];
-    hkdf.expand(&info, &mut output)
-        .map_err(|_| crate::Error::Crypto("HKDF expansion failed".to_string()))?;
+    let result = hkdf.expand(&info, &mut output)
+        .map_err(|_| crate::Error::Crypto("HKDF expansion failed".to_string()));
 
+    // Zeroize the info string as it may contain sensitive context
+    info.zeroize();
+
+    result?;
     Ok(output)
 }
 

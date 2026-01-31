@@ -17,6 +17,12 @@
 //! - SPAKE2 for password-authenticated key exchange
 //! - NaCl SecretBox (XSalsa20-Poly1305) for authenticated encryption
 //! - HKDF-SHA256 for key derivation
+//!
+//! Additional security measures:
+//! - Sensitive data (keys, passwords) are zeroized on drop
+//! - Constant-time comparisons for cryptographic operations
+//! - Path traversal protection for archive extraction
+//! - Input validation with size limits
 
 pub mod crypto;
 pub mod protocol;
@@ -42,21 +48,24 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Error types for SecureBeam operations
+///
+/// Note: Error messages are intentionally generic to avoid leaking
+/// sensitive information to potential attackers.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("Connection error: {0}")]
+    #[error("Connection error")]
     Connection(String),
 
-    #[error("Protocol error: {0}")]
+    #[error("Protocol error")]
     Protocol(String),
 
-    #[error("Crypto error: {0}")]
+    #[error("Cryptographic operation failed")]
     Crypto(String),
 
-    #[error("Transfer error: {0}")]
+    #[error("Transfer failed")]
     Transfer(String),
 
-    #[error("IO error: {0}")]
+    #[error("IO error")]
     Io(#[from] std::io::Error),
 
     #[error("Session not found")]
@@ -68,9 +77,25 @@ pub enum Error {
     #[error("Peer disconnected")]
     PeerDisconnected,
 
-    #[error("Wrong wormhole code")]
+    #[error("Authentication failed")]
     WrongCode,
 
-    #[error("MITM attack detected")]
+    #[error("Security verification failed")]
     MitmDetected,
+}
+
+impl Error {
+    /// Get detailed error information for logging (not for display to users)
+    ///
+    /// This method returns the internal error details which should only be
+    /// used for debugging/logging, not shown to end users.
+    pub fn details(&self) -> Option<&str> {
+        match self {
+            Error::Connection(s) => Some(s),
+            Error::Protocol(s) => Some(s),
+            Error::Crypto(s) => Some(s),
+            Error::Transfer(s) => Some(s),
+            _ => None,
+        }
+    }
 }

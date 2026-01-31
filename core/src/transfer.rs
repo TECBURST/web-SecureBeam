@@ -5,10 +5,16 @@
 //! - Directory transfers (TAR archive, optionally GZIP compressed)
 //! - Hash verification
 //! - Progress reporting
+//!
+//! Security features:
+//! - Path traversal protection in TAR extraction
+//! - Constant-time hash comparison
+//! - Size limits to prevent DoS
 
 use std::io::{Read, Write};
 use std::path::Path;
 use sha2::{Sha256, Digest};
+use subtle::ConstantTimeEq;
 
 use crate::{Error, Result};
 use crate::protocol::FileOffer;
@@ -16,6 +22,12 @@ use crate::transit::TransitConnection;
 
 /// Default chunk size for file transfers (64 KB)
 pub const DEFAULT_CHUNK_SIZE: usize = 64 * 1024;
+
+/// Maximum file size for transfers (10 GB)
+pub const MAX_TRANSFER_SIZE: u64 = 10 * 1024 * 1024 * 1024;
+
+/// Maximum number of files in a directory transfer
+pub const MAX_DIRECTORY_FILES: u64 = 100_000;
 
 /// File extensions that are already compressed (don't GZIP these)
 const COMPRESSED_EXTENSIONS: &[&str] = &[
@@ -222,6 +234,8 @@ impl FileTransfer {
     // ==================== RECEIVER SIDE ====================
 
     /// Receive a file from a transit connection
+    ///
+    /// Security: Validates file size against offer and maximum limits.
     pub async fn receive_file<P, F>(
         &self,
         conn: &mut TransitConnection,
@@ -235,15 +249,29 @@ impl FileTransfer {
     {
         let path = path.as_ref();
         let total_size = offer.transfer_size();
+
+        // Security: Validate transfer size
+        if total_size > MAX_TRANSFER_SIZE {
+            return Err(Error::Transfer("File size exceeds maximum allowed".to_string()));
+        }
+
         let mut progress = TransferProgress::new(total_size);
 
-        // Receive all data
-        let mut data = Vec::new();
+        // Pre-allocate with capacity, but with a reasonable limit to prevent OOM
+        let initial_capacity = std::cmp::min(total_size as usize, 100 * 1024 * 1024);
+        let mut data = Vec::with_capacity(initial_capacity);
+
         loop {
             let chunk = conn.receive().await?;
             if chunk.is_empty() {
                 break;
             }
+
+            // Security: Check we don't exceed the declared size
+            if data.len() + chunk.len() > (total_size as usize) + self.chunk_size {
+                return Err(Error::Transfer("Received more data than declared".to_string()));
+            }
+
             data.extend_from_slice(&chunk);
             progress.bytes_transferred = data.len() as u64;
             progress_callback(progress.clone());
@@ -263,6 +291,8 @@ impl FileTransfer {
     }
 
     /// Receive a directory (TAR archive) from a transit connection
+    ///
+    /// Security: Validates archive size and extracts with path traversal protection.
     pub async fn receive_directory<P, F>(
         &self,
         conn: &mut TransitConnection,
@@ -276,15 +306,29 @@ impl FileTransfer {
     {
         let path = path.as_ref();
         let total_size = offer.transfer_size();
+
+        // Security: Validate transfer size
+        if total_size > MAX_TRANSFER_SIZE {
+            return Err(Error::Transfer("Archive size exceeds maximum allowed".to_string()));
+        }
+
         let mut progress = TransferProgress::new(total_size);
 
-        // Receive all data
-        let mut data = Vec::new();
+        // Pre-allocate with capacity limit
+        let initial_capacity = std::cmp::min(total_size as usize, 100 * 1024 * 1024);
+        let mut data = Vec::with_capacity(initial_capacity);
+
         loop {
             let chunk = conn.receive().await?;
             if chunk.is_empty() {
                 break;
             }
+
+            // Security: Check we don't exceed the declared size
+            if data.len() + chunk.len() > (total_size as usize) + self.chunk_size {
+                return Err(Error::Transfer("Received more data than declared".to_string()));
+            }
+
             data.extend_from_slice(&chunk);
             progress.bytes_transferred = data.len() as u64;
             progress_callback(progress.clone());
@@ -380,15 +424,73 @@ impl FileTransfer {
     }
 
     /// Extract a TAR archive to a directory
-    fn extract_tar_archive(&self, data: &[u8], path: &Path) -> Result<()> {
+    ///
+    /// Security: This function validates each entry path to prevent path traversal
+    /// attacks (Zip Slip vulnerability).
+    fn extract_tar_archive(&self, data: &[u8], dest_path: &Path) -> Result<()> {
         let mut archive = tar::Archive::new(data);
 
         // Create the destination directory if it doesn't exist
-        std::fs::create_dir_all(path)
-            .map_err(|e| Error::Transfer(format!("Create dir error: {}", e)))?;
+        let dest_canonical = dest_path.canonicalize()
+            .or_else(|_| {
+                std::fs::create_dir_all(dest_path)?;
+                dest_path.canonicalize()
+            })
+            .map_err(|e| Error::Transfer(format!("Invalid destination path: {}", e)))?;
 
-        archive.unpack(path)
-            .map_err(|e| Error::Transfer(format!("TAR extract error: {}", e)))
+        for entry in archive.entries()
+            .map_err(|e| Error::Transfer(format!("TAR read error: {}", e)))? {
+
+            let mut entry = entry
+                .map_err(|e| Error::Transfer(format!("TAR entry error: {}", e)))?;
+
+            let entry_path = entry.path()
+                .map_err(|e| Error::Transfer(format!("TAR path error: {}", e)))?;
+
+            // Security: Validate the entry path to prevent path traversal
+            let full_path = dest_canonical.join(&entry_path);
+            let full_path_canonical = if full_path.exists() {
+                full_path.canonicalize()
+                    .map_err(|e| Error::Transfer(format!("Path error: {}", e)))?
+            } else {
+                // For new files, check that all parent components are safe
+                let mut safe_path = dest_canonical.clone();
+                for component in entry_path.components() {
+                    match component {
+                        std::path::Component::Normal(name) => {
+                            safe_path.push(name);
+                        }
+                        std::path::Component::ParentDir => {
+                            // SECURITY: Reject any path with ".." components
+                            return Err(Error::Transfer(
+                                "Path traversal attempt detected in archive".to_string()
+                            ));
+                        }
+                        _ => continue,
+                    }
+                }
+                safe_path
+            };
+
+            // Verify the resolved path is inside the destination directory
+            if !full_path_canonical.starts_with(&dest_canonical) {
+                return Err(Error::Transfer(
+                    "Path traversal attempt detected in archive".to_string()
+                ));
+            }
+
+            // Create parent directories if needed
+            if let Some(parent) = full_path_canonical.parent() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| Error::Transfer(format!("Create dir error: {}", e)))?;
+            }
+
+            // Extract the entry
+            entry.unpack(&full_path_canonical)
+                .map_err(|e| Error::Transfer(format!("TAR unpack error: {}", e)))?;
+        }
+
+        Ok(())
     }
 
     // ==================== HASH VERIFICATION ====================
@@ -407,10 +509,22 @@ impl FileTransfer {
         hex::encode(result)
     }
 
-    /// Verify file hash
+    /// Verify file hash using constant-time comparison
+    ///
+    /// This prevents timing attacks where an attacker could learn about the
+    /// expected hash by measuring comparison time.
     pub async fn verify_file_hash<P: AsRef<Path>>(&self, path: P, expected_hash: &str) -> Result<bool> {
         let actual_hash = self.compute_file_hash(path).await?;
-        Ok(actual_hash == expected_hash)
+
+        // Use constant-time comparison to prevent timing attacks
+        let actual_bytes = actual_hash.as_bytes();
+        let expected_bytes = expected_hash.as_bytes();
+
+        if actual_bytes.len() != expected_bytes.len() {
+            return Ok(false);
+        }
+
+        Ok(actual_bytes.ct_eq(expected_bytes).into())
     }
 
     // ==================== DIRECTORY UTILS ====================
