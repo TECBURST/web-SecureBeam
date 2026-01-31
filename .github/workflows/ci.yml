@@ -67,18 +67,30 @@ jobs:
       - name: Clippy (relay-server)
         run: cargo clippy --manifest-path relay-server/Cargo.toml -- -D warnings
 
-      # Frontend Lint
+      - name: Clippy (client/src-tauri)
+        run: cargo clippy --manifest-path client/src-tauri/Cargo.toml -- -D warnings
+
+      # Frontend Lint (Coming Soon Page)
       - name: Install Frontend Dependencies
         working-directory: frontend
         run: npm install
 
-      - name: TypeCheck
+      - name: Frontend TypeCheck
         working-directory: frontend
         run: npm run typecheck
 
-      - name: ESLint
+      - name: Frontend ESLint
         working-directory: frontend
         run: npm run lint
+
+      # Client Lint (Tauri Desktop App)
+      - name: Install Client Dependencies
+        working-directory: client
+        run: npm install -g yarn && yarn install
+
+      - name: Client TypeCheck
+        working-directory: client
+        run: yarn typecheck
 
   # ============================================
   # STAGE 2: Test (parallel, after lint)
