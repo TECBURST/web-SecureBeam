@@ -1,27 +1,26 @@
-name: CI
+name: CI/CD
 
 on:
   push:
-    branches: [master, develop]
-    # Keine CI bei Release-Tags (Release-Workflow übernimmt)
-    tags-ignore:
+    branches: [master]
+    tags:
       - 'v[0-9]+.[0-9]+.[0-9]+'
   pull_request:
     branches: [master]
 
+permissions:
+  contents: write
+  packages: write
+
 env:
   CARGO_TERM_COLOR: always
-  CARGO_HOME: /home/runner/.cargo
-  CARGO_INCREMENTAL: 0
 
 jobs:
   # ============================================
-  # STAGE 1: Lint (Gate)
-  # If this fails, nothing else runs
+  # STAGE 1: Lint (Gate - must pass for anything else)
   # ============================================
-
   lint:
-    name: Lint All Code
+    name: Lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -46,284 +45,353 @@ jobs:
             ~/.cargo/git/db/
           key: ${{ runner.os }}-cargo-lint-${{ hashFiles('**/Cargo.lock') }}
 
-      # Rust Linting - All Projects
-      - name: Rust Format Check (core)
+      # Rust Format & Clippy
+      - name: Rust Format (core)
         run: cargo fmt --manifest-path core/Cargo.toml -- --check
 
-      - name: Rust Format Check (server)
+      - name: Rust Format (server)
         run: cargo fmt --manifest-path server/Cargo.toml -- --check
 
-      - name: Rust Format Check (relay-server)
+      - name: Rust Format (relay-server)
         run: cargo fmt --manifest-path relay-server/Cargo.toml -- --check
 
-      - name: Rust Clippy (core)
+      - name: Rust Format (client)
+        run: cargo fmt --manifest-path client/src-tauri/Cargo.toml -- --check
+
+      - name: Clippy (core)
         run: cargo clippy --manifest-path core/Cargo.toml -- -D warnings
 
-      - name: Rust Clippy (server)
+      - name: Clippy (server)
         run: cargo clippy --manifest-path server/Cargo.toml -- -D warnings
 
-      - name: Rust Clippy (relay-server)
+      - name: Clippy (relay-server)
         run: cargo clippy --manifest-path relay-server/Cargo.toml -- -D warnings
 
-      # Frontend Linting
+      # Frontend Lint
       - name: Install Frontend Dependencies
         working-directory: frontend
         run: npm install
 
-      - name: Frontend TypeCheck
+      - name: TypeCheck
         working-directory: frontend
         run: npm run typecheck
 
-      - name: Frontend ESLint
+      - name: ESLint
         working-directory: frontend
         run: npm run lint
 
-      # Client Linting (Tauri)
-      - name: Install Client Dependencies
-        working-directory: client
-        run: npm install -g yarn && yarn install
-
-      - name: Client Rust Format Check
-        run: cargo fmt --manifest-path client/src-tauri/Cargo.toml -- --check
-
   # ============================================
-  # STAGE 2: Test & Build (only if lint passes)
+  # STAGE 2: Test (parallel, after lint)
   # ============================================
-
   test-core:
-    name: Test Core Library
+    name: Test Core
     needs: lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Cache
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
+            ~/.cargo/
             core/target/
-          key: ${{ runner.os }}-cargo-core-${{ hashFiles('core/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-core-
-
-      - name: Run tests
-        working-directory: core
-        run: cargo test --verbose
+          key: ${{ runner.os }}-core-${{ hashFiles('core/Cargo.lock') }}
+      - run: cargo test --manifest-path core/Cargo.toml
 
   test-server:
-    name: Test Mailbox Server
+    name: Test Server
     needs: lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Cache
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
+            ~/.cargo/
             server/target/
-          key: ${{ runner.os }}-cargo-server-${{ hashFiles('server/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-server-
-
-      - name: Build
-        working-directory: server
-        run: cargo build --verbose
-
-      - name: Run tests
-        working-directory: server
-        run: cargo test --verbose
+          key: ${{ runner.os }}-server-${{ hashFiles('server/Cargo.lock') }}
+      - run: cargo test --manifest-path server/Cargo.toml
 
   test-relay:
-    name: Test Relay Server
+    name: Test Relay
     needs: lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Cache
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
+            ~/.cargo/
             relay-server/target/
-          key: ${{ runner.os }}-cargo-relay-${{ hashFiles('relay-server/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-relay-
+          key: ${{ runner.os }}-relay-${{ hashFiles('relay-server/Cargo.lock') }}
+      - run: cargo test --manifest-path relay-server/Cargo.toml
 
-      - name: Build
-        working-directory: relay-server
-        run: cargo build --verbose
-
-      - name: Run tests
-        working-directory: relay-server
-        run: cargo test --verbose
-
-  test-frontend:
-    name: Test Frontend
+  # ============================================
+  # STAGE 3: Build Docker Images
+  # ============================================
+  build-frontend:
+    name: Docker Frontend
     needs: lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Login to GHCR
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: docker/login-action@v3
         with:
-          node-version: '20'
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install dependencies
-        working-directory: frontend
-        run: npm install
-
-      - name: Build
-        working-directory: frontend
-        run: npm run build
-
-  # Build Tauri (Linux only for speed)
-  build-tauri:
-    name: Build Tauri (Linux)
-    needs: lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install system dependencies
+      - name: Get version
+        id: version
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+            echo "push=true" >> $GITHUB_OUTPUT
+          else
+            echo "version=dev" >> $GITHUB_OUTPUT
+            echo "push=false" >> $GITHUB_OUTPUT
+          fi
+          echo "owner=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install Yarn
-        run: npm install -g yarn
-
-      - name: Cache cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            client/src-tauri/target/
-          key: ${{ runner.os }}-cargo-tauri-${{ hashFiles('client/src-tauri/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-tauri-
-
-      - name: Install frontend dependencies
-        working-directory: client
-        run: yarn install
-
-      - name: Build Tauri (debug mode for speed)
-        working-directory: client
-        run: yarn tauri build --debug
-
-  # Build Docker images (without pushing) to verify they work
-  build-docker-frontend:
-    name: Build Docker (Frontend)
-    needs: lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build Frontend Image
+      - name: Build & Push
         uses: docker/build-push-action@v5
         with:
           context: ./frontend
-          push: false
-          tags: securebeam-frontend:test
+          push: ${{ steps.version.outputs.push }}
+          tags: |
+            ghcr.io/${{ steps.version.outputs.owner }}/securebeam-frontend:${{ steps.version.outputs.version }}
+            ghcr.io/${{ steps.version.outputs.owner }}/securebeam-frontend:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  build-docker-mailbox:
-    name: Build Docker (Mailbox Server)
+  build-mailbox:
+    name: Docker Mailbox
     needs: lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Login to GHCR
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build Mailbox Server Image
+      - name: Get version
+        id: version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+            echo "push=true" >> $GITHUB_OUTPUT
+          else
+            echo "version=dev" >> $GITHUB_OUTPUT
+            echo "push=false" >> $GITHUB_OUTPUT
+          fi
+          echo "owner=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
+      - name: Build & Push
         uses: docker/build-push-action@v5
         with:
           context: ./server
-          push: false
-          tags: securebeam-mailbox:test
+          push: ${{ steps.version.outputs.push }}
+          tags: |
+            ghcr.io/${{ steps.version.outputs.owner }}/securebeam-mailbox:${{ steps.version.outputs.version }}
+            ghcr.io/${{ steps.version.outputs.owner }}/securebeam-mailbox:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  build-docker-relay:
-    name: Build Docker (Relay Server)
+  build-relay:
+    name: Docker Relay
     needs: lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Login to GHCR
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build Relay Server Image
+      - name: Get version
+        id: version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+            echo "push=true" >> $GITHUB_OUTPUT
+          else
+            echo "version=dev" >> $GITHUB_OUTPUT
+            echo "push=false" >> $GITHUB_OUTPUT
+          fi
+          echo "owner=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
+      - name: Build & Push
         uses: docker/build-push-action@v5
         with:
           context: ./relay-server
-          push: false
-          tags: securebeam-relay:test
+          push: ${{ steps.version.outputs.push }}
+          tags: |
+            ghcr.io/${{ steps.version.outputs.owner }}/securebeam-relay:${{ steps.version.outputs.version }}
+            ghcr.io/${{ steps.version.outputs.owner }}/securebeam-relay:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # Security Audit (informational, doesn't block)
-  security-audit:
-    name: Security Audit
+  # ============================================
+  # STAGE 4: Build Desktop Apps (only on tags)
+  # ============================================
+  build-linux:
+    name: Desktop Linux
     needs: lint
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
-    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install -g yarn
+      - run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libfuse2
+      - run: yarn install
+        working-directory: client
+      - run: yarn tauri build
+        working-directory: client
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-builds
+          path: |
+            client/src-tauri/target/release/bundle/deb/*.deb
+            client/src-tauri/target/release/bundle/rpm/*.rpm
+            client/src-tauri/target/release/bundle/appimage/*.AppImage
+
+  build-windows:
+    name: Desktop Windows
+    needs: lint
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install -g yarn
+      - run: yarn install
+        working-directory: client
+      - run: yarn tauri build
+        working-directory: client
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-builds
+          path: |
+            client/src-tauri/target/release/bundle/msi/*.msi
+            client/src-tauri/target/release/bundle/nsis/*.exe
+
+  build-macos:
+    name: Desktop macOS
+    needs: lint
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install -g yarn
+      - run: yarn install
+        working-directory: client
+      - run: yarn tauri build --target aarch64-apple-darwin
+        working-directory: client
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-builds
+          path: client/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+
+  # ============================================
+  # STAGE 5: Release & Deploy (only on tags)
+  # ============================================
+  release:
+    name: Create Release
+    needs: [build-frontend, build-mailbox, build-relay, build-linux, build-windows, build-macos]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
 
-      - name: Install cargo-audit
-        run: cargo install cargo-audit --locked
+      - name: Get version
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
-      - name: Audit core dependencies
-        working-directory: core
-        run: cargo audit
-        continue-on-error: true
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: SecureBeam v${{ steps.version.outputs.version }}
+          generate_release_notes: true
+          files: |
+            artifacts/**/*.deb
+            artifacts/**/*.rpm
+            artifacts/**/*.AppImage
+            artifacts/**/*.msi
+            artifacts/**/*.exe
+            artifacts/**/*.dmg
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Audit server dependencies
-        working-directory: server
-        run: cargo audit
-        continue-on-error: true
+  deploy:
+    name: Deploy
+    needs: [release, build-frontend, build-mailbox, build-relay]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get version
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
-      - name: Audit relay dependencies
-        working-directory: relay-server
-        run: cargo audit
-        continue-on-error: true
+      - name: Deploy to Server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -e
+            sudo mkdir -p /opt/securebeam
+            cd /opt/securebeam
+
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            docker pull ghcr.io/tecburst/securebeam-frontend:${{ steps.version.outputs.version }}
+            docker pull ghcr.io/tecburst/securebeam-mailbox:${{ steps.version.outputs.version }}
+            docker pull ghcr.io/tecburst/securebeam-relay:${{ steps.version.outputs.version }}
+
+            curl -sL https://raw.githubusercontent.com/${{ github.repository }}/master/deploy/docker-compose.yml -o docker-compose.yml
+
+            export VERSION=${{ steps.version.outputs.version }}
+            docker compose down --remove-orphans || true
+            docker compose up -d
+            docker image prune -f
+
+            echo "Deployed v${{ steps.version.outputs.version }}!"
