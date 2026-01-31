@@ -11,12 +11,17 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RUST_BACKTRACE: 1
+  CARGO_HOME: /home/runner/.cargo
+  CARGO_INCREMENTAL: 0
 
 jobs:
-  # Rust Tests for Core Library
-  test-core:
-    name: Test Core Library
+  # ============================================
+  # STAGE 1: Lint (Gate)
+  # If this fails, nothing else runs
+  # ============================================
+
+  lint:
+    name: Lint All Code
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,7 +29,76 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy, rustfmt
+          components: rustfmt, clippy
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Cache Rust
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-lint-${{ hashFiles('**/Cargo.lock') }}
+
+      # Rust Linting - All Projects
+      - name: Rust Format Check (core)
+        run: cargo fmt --manifest-path core/Cargo.toml -- --check
+
+      - name: Rust Format Check (server)
+        run: cargo fmt --manifest-path server/Cargo.toml -- --check
+
+      - name: Rust Format Check (relay-server)
+        run: cargo fmt --manifest-path relay-server/Cargo.toml -- --check
+
+      - name: Rust Clippy (core)
+        run: cargo clippy --manifest-path core/Cargo.toml -- -D warnings
+
+      - name: Rust Clippy (server)
+        run: cargo clippy --manifest-path server/Cargo.toml -- -D warnings
+
+      - name: Rust Clippy (relay-server)
+        run: cargo clippy --manifest-path relay-server/Cargo.toml -- -D warnings
+
+      # Frontend Linting
+      - name: Install Frontend Dependencies
+        working-directory: frontend
+        run: npm install
+
+      - name: Frontend TypeCheck
+        working-directory: frontend
+        run: npm run typecheck
+
+      - name: Frontend ESLint
+        working-directory: frontend
+        run: npm run lint
+
+      # Client Linting (Tauri)
+      - name: Install Client Dependencies
+        working-directory: client
+        run: npm install -g yarn && yarn install
+
+      - name: Client Rust Format Check
+        run: cargo fmt --manifest-path client/src-tauri/Cargo.toml -- --check
+
+  # ============================================
+  # STAGE 2: Test & Build (only if lint passes)
+  # ============================================
+
+  test-core:
+    name: Test Core Library
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Cache cargo
         uses: actions/cache@v4
@@ -38,21 +112,13 @@ jobs:
           key: ${{ runner.os }}-cargo-core-${{ hashFiles('core/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-core-
 
-      - name: Check formatting
-        working-directory: core
-        run: cargo fmt -- --check
-
-      - name: Clippy
-        working-directory: core
-        run: cargo clippy -- -W warnings
-
       - name: Run tests
         working-directory: core
         run: cargo test --verbose
 
-  # Rust Tests for Mailbox Server
-  test-mailbox-server:
+  test-server:
     name: Test Mailbox Server
+    needs: lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -80,9 +146,9 @@ jobs:
         working-directory: server
         run: cargo test --verbose
 
-  # Rust Tests for Relay Server
-  test-relay-server:
+  test-relay:
     name: Test Relay Server
+    needs: lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -110,37 +176,9 @@ jobs:
         working-directory: relay-server
         run: cargo test --verbose
 
-  # Security Audit
-  security-audit:
-    name: Security Audit
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install cargo-audit
-        run: cargo install cargo-audit --locked
-
-      - name: Audit core dependencies
-        working-directory: core
-        run: cargo audit
-        continue-on-error: true
-
-      - name: Audit server dependencies
-        working-directory: server
-        run: cargo audit
-        continue-on-error: true
-
-      - name: Audit relay dependencies
-        working-directory: relay-server
-        run: cargo audit
-        continue-on-error: true
-
-  # Frontend Tests
   test-frontend:
     name: Test Frontend
+    needs: lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -154,21 +192,14 @@ jobs:
         working-directory: frontend
         run: npm install
 
-      - name: Type check
-        working-directory: frontend
-        run: npm run typecheck
-
-      - name: Lint
-        working-directory: frontend
-        run: npm run lint
-
       - name: Build
         working-directory: frontend
         run: npm run build
 
-  # Desktop Client Build Check (Linux only for speed)
-  check-tauri:
-    name: Check Tauri Build
+  # Build Tauri (Linux only for speed)
+  build-tauri:
+    name: Build Tauri (Linux)
+    needs: lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -205,6 +236,74 @@ jobs:
         working-directory: client
         run: yarn install
 
-      - name: Check Tauri build (debug mode for speed)
+      - name: Build Tauri (debug mode for speed)
         working-directory: client
-        run: cargo check --manifest-path src-tauri/Cargo.toml
+        run: yarn tauri build --debug
+
+  # Build Docker images (without pushing) to verify they work
+  build-docker:
+    name: Build Docker Images
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Mailbox Server Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./server
+          push: false
+          tags: securebeam-mailbox:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build Relay Server Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./relay-server
+          push: false
+          tags: securebeam-relay:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build Frontend Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: false
+          tags: securebeam-frontend:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Security Audit (informational, doesn't block)
+  security-audit:
+    name: Security Audit
+    needs: lint
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Audit core dependencies
+        working-directory: core
+        run: cargo audit
+        continue-on-error: true
+
+      - name: Audit server dependencies
+        working-directory: server
+        run: cargo audit
+        continue-on-error: true
+
+      - name: Audit relay dependencies
+        working-directory: relay-server
+        run: cargo audit
+        continue-on-error: true
