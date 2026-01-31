@@ -3,30 +3,58 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      # Nur semantic versioning Tags: v1.0.0, v1.0.1, v2.0.0, etc.
+      - 'v[0-9]+.[0-9]+.[0-9]+'
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to release (e.g., 0.1.0)'
+        description: 'Version to release (e.g., 1.0.0)'
         required: true
         type: string
 
 permissions:
   contents: write
+  packages: write
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # Validate version format
+  validate:
+    name: Validate Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Get version from tag or input
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          fi
+
+          # Validate semver format
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Error: Version '$VERSION' is not valid semver (expected: X.Y.Z)"
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Release version: $VERSION"
+
   # Build for Linux
   build-linux:
     name: Build Linux
+    needs: validate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Rust
-        uses: dtolnay/rust-action@stable
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Install system dependencies
         run: |
@@ -54,9 +82,20 @@ jobs:
       - name: Install Yarn
         run: npm install -g yarn
 
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            client/src-tauri/target/
+          key: ${{ runner.os }}-cargo-release-${{ hashFiles('client/src-tauri/Cargo.lock') }}
+
       - name: Install frontend dependencies
         working-directory: client
-        run: yarn install
+        run: yarn install --frozen-lockfile
 
       - name: Build Tauri
         working-directory: client
@@ -75,12 +114,13 @@ jobs:
   # Build for Windows
   build-windows:
     name: Build Windows
+    needs: validate
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Rust
-        uses: dtolnay/rust-action@stable
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -90,9 +130,20 @@ jobs:
       - name: Install Yarn
         run: npm install -g yarn
 
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            client/src-tauri/target/
+          key: ${{ runner.os }}-cargo-release-${{ hashFiles('client/src-tauri/Cargo.lock') }}
+
       - name: Install frontend dependencies
         working-directory: client
-        run: yarn install
+        run: yarn install --frozen-lockfile
 
       - name: Build Tauri
         working-directory: client
@@ -110,12 +161,13 @@ jobs:
   # Build for macOS (Intel)
   build-macos-intel:
     name: Build macOS (Intel)
+    needs: validate
     runs-on: macos-13
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Rust
-        uses: dtolnay/rust-action@stable
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -125,9 +177,20 @@ jobs:
       - name: Install Yarn
         run: npm install -g yarn
 
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            client/src-tauri/target/
+          key: ${{ runner.os }}-cargo-release-intel-${{ hashFiles('client/src-tauri/Cargo.lock') }}
+
       - name: Install frontend dependencies
         working-directory: client
-        run: yarn install
+        run: yarn install --frozen-lockfile
 
       - name: Build Tauri
         working-directory: client
@@ -139,18 +202,18 @@ jobs:
           name: macos-intel-builds
           path: |
             client/src-tauri/target/release/bundle/dmg/*.dmg
-            client/src-tauri/target/release/bundle/macos/*.app
           if-no-files-found: warn
 
   # Build for macOS (Apple Silicon)
   build-macos-arm:
     name: Build macOS (Apple Silicon)
+    needs: validate
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Rust
-        uses: dtolnay/rust-action@stable
+        uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-darwin
 
@@ -162,9 +225,20 @@ jobs:
       - name: Install Yarn
         run: npm install -g yarn
 
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            client/src-tauri/target/
+          key: ${{ runner.os }}-cargo-release-arm-${{ hashFiles('client/src-tauri/Cargo.lock') }}
+
       - name: Install frontend dependencies
         working-directory: client
-        run: yarn install
+        run: yarn install --frozen-lockfile
 
       - name: Build Tauri
         working-directory: client
@@ -176,13 +250,12 @@ jobs:
           name: macos-arm-builds
           path: |
             client/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
-            client/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app
           if-no-files-found: warn
 
   # Create GitHub Release
   create-release:
     name: Create Release
-    needs: [build-linux, build-windows, build-macos-intel, build-macos-arm]
+    needs: [validate, build-linux, build-windows, build-macos-intel, build-macos-arm]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -192,25 +265,19 @@ jobs:
         with:
           path: artifacts
 
-      - name: Display structure
-        run: ls -R artifacts
-
-      - name: Get version
-        id: version
+      - name: Display artifacts
         run: |
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
-          else
-            echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-          fi
+          echo "=== Downloaded Artifacts ==="
+          find artifacts -type f -name "*.deb" -o -name "*.rpm" -o -name "*.AppImage" -o -name "*.msi" -o -name "*.exe" -o -name "*.dmg" | sort
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.version.outputs.version }}
-          name: SecureBeam v${{ steps.version.outputs.version }}
-          draft: true
+          tag_name: v${{ needs.validate.outputs.version }}
+          name: SecureBeam v${{ needs.validate.outputs.version }}
+          draft: false
           prerelease: false
+          generate_release_notes: true
           files: |
             artifacts/**/*.deb
             artifacts/**/*.rpm
@@ -219,35 +286,40 @@ jobs:
             artifacts/**/*.exe
             artifacts/**/*.dmg
           body: |
-            ## SecureBeam v${{ steps.version.outputs.version }}
+            ## SecureBeam v${{ needs.validate.outputs.version }}
 
             Secure P2P file transfer based on the Magic Wormhole protocol.
 
             ### Downloads
 
-            | Platform | Download |
-            |----------|----------|
-            | Windows | `.msi` or `.exe` |
-            | Linux (Debian/Ubuntu) | `.deb` |
-            | Linux (Fedora/RHEL) | `.rpm` |
-            | Linux (Universal) | `.AppImage` |
-            | macOS (Intel) | `.dmg` |
-            | macOS (Apple Silicon) | `.dmg` |
+            | Platform | File | Architecture |
+            |----------|------|--------------|
+            | **Windows** | `.msi` / `.exe` | x64 |
+            | **Linux (Debian/Ubuntu)** | `.deb` | x64 |
+            | **Linux (Fedora/RHEL)** | `.rpm` | x64 |
+            | **Linux (Universal)** | `.AppImage` | x64 |
+            | **macOS** | `.dmg` | Intel (x64) |
+            | **macOS** | `.dmg` | Apple Silicon (ARM64) |
 
             ### Security
 
             All transfers are end-to-end encrypted using:
-            - SPAKE2 for key exchange
-            - NaCl SecretBox (XSalsa20-Poly1305) for encryption
+            - SPAKE2 for password-authenticated key exchange
+            - NaCl SecretBox (XSalsa20-Poly1305) for authenticated encryption
             - HKDF-SHA256 for key derivation
 
-            See [SECURITY.md](https://github.com/your-org/SecureBeam/blob/master/SECURITY.md) for details.
+            See [SECURITY.md](./SECURITY.md) for details.
+
+            ### Changelog
+
+            See the automatically generated release notes below.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # Build and push Docker images
   docker:
     name: Build Docker Images
+    needs: validate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -262,23 +334,16 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Get version
-        id: version
-        run: |
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
-          else
-            echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-          fi
-
       - name: Build and push Mailbox Server
         uses: docker/build-push-action@v5
         with:
           context: ./server
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}/mailbox-server:${{ steps.version.outputs.version }}
+            ghcr.io/${{ github.repository }}/mailbox-server:${{ needs.validate.outputs.version }}
             ghcr.io/${{ github.repository }}/mailbox-server:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Build and push Relay Server
         uses: docker/build-push-action@v5
@@ -286,5 +351,7 @@ jobs:
           context: ./relay-server
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}/relay-server:${{ steps.version.outputs.version }}
+            ghcr.io/${{ github.repository }}/relay-server:${{ needs.validate.outputs.version }}
             ghcr.io/${{ github.repository }}/relay-server:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
