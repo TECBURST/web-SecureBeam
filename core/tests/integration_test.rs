@@ -4,8 +4,8 @@
 //! including cryptographic operations, file transfer, and protocol handling.
 
 use securebeam_core::{
-    crypto::{Spake2Exchange, Side, SecretBox, derive_key, derive_verifier, Purpose},
-    protocol::{FileOffer, FileAnswer},
+    crypto::{derive_key, derive_verifier, Purpose, SecretBox, Side, Spake2Exchange},
+    protocol::{FileAnswer, FileOffer},
     transfer::FileTransfer,
 };
 use std::path::PathBuf;
@@ -26,7 +26,9 @@ fn test_full_key_exchange() {
 
     // Complete exchange
     let sender_key = sender.finish(&receiver_msg).expect("Sender should finish");
-    let receiver_key = receiver.finish(&sender_msg).expect("Receiver should finish");
+    let receiver_key = receiver
+        .finish(&sender_msg)
+        .expect("Receiver should finish");
 
     // Keys should match
     assert_eq!(sender_key, receiver_key);
@@ -64,19 +66,21 @@ fn test_encrypted_communication() {
         &shared_key,
         &Purpose::Phase {
             side: "sender".to_string(),
-            phase: "offer".to_string()
+            phase: "offer".to_string(),
         },
-        32
-    ).expect("Should derive key");
+        32,
+    )
+    .expect("Should derive key");
 
     let receiver_phase_key = derive_key(
         &shared_key,
         &Purpose::Phase {
             side: "sender".to_string(),
-            phase: "offer".to_string()
+            phase: "offer".to_string(),
         },
-        32
-    ).expect("Should derive key");
+        32,
+    )
+    .expect("Should derive key");
 
     // Keys should match (same purpose)
     assert_eq!(sender_phase_key, receiver_phase_key);
@@ -105,7 +109,9 @@ async fn test_file_offer_answer_flow() {
     let transfer = FileTransfer::new();
 
     // Create offer
-    let offer = transfer.prepare_file_offer(&test_file).await
+    let offer = transfer
+        .prepare_file_offer(&test_file)
+        .await
         .expect("Should prepare offer");
 
     assert_eq!(offer.name(), "test.txt");
@@ -141,7 +147,9 @@ fn test_text_file_compression() {
     assert!(compressed.len() < original.len());
 
     // Decompress
-    let decompressed = transfer.decompress_data(&compressed).expect("Should decompress");
+    let decompressed = transfer
+        .decompress_data(&compressed)
+        .expect("Should decompress");
 
     // Should match original
     assert_eq!(decompressed, original.to_vec());
@@ -201,7 +209,9 @@ async fn test_directory_offer() {
     std::fs::write(test_subdir.join("file2.txt"), "Content 2").unwrap();
 
     let transfer = FileTransfer::new();
-    let offer = transfer.prepare_directory_offer(&test_subdir).await
+    let offer = transfer
+        .prepare_directory_offer(&test_subdir)
+        .await
         .expect("Should prepare directory offer");
 
     assert_eq!(offer.name(), "test_folder");
@@ -236,20 +246,20 @@ fn test_secret_zeroization() {
 fn test_transit_key_derivation() {
     let shared_key = [0x42u8; 32];
 
-    let transit_key = derive_key(&shared_key, &Purpose::Transit, 32)
-        .expect("Should derive transit key");
+    let transit_key =
+        derive_key(&shared_key, &Purpose::Transit, 32).expect("Should derive transit key");
 
     assert_eq!(transit_key.len(), 32);
 
     // Same inputs should produce same output
-    let transit_key2 = derive_key(&shared_key, &Purpose::Transit, 32)
-        .expect("Should derive transit key");
+    let transit_key2 =
+        derive_key(&shared_key, &Purpose::Transit, 32).expect("Should derive transit key");
 
     assert_eq!(transit_key, transit_key2);
 
     // Different purpose should produce different key
-    let verifier_key = derive_key(&shared_key, &Purpose::Verifier, 32)
-        .expect("Should derive verifier key");
+    let verifier_key =
+        derive_key(&shared_key, &Purpose::Verifier, 32).expect("Should derive verifier key");
 
     assert_ne!(transit_key, verifier_key);
 }
@@ -262,10 +272,12 @@ impl FileTransfer {
         use std::io::Write;
 
         let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
-        encoder.write_all(data)
+        encoder
+            .write_all(data)
             .map_err(|e| securebeam_core::Error::Transfer(format!("Compression error: {}", e)))?;
-        encoder.finish()
-            .map_err(|e| securebeam_core::Error::Transfer(format!("Compression finish error: {}", e)))
+        encoder.finish().map_err(|e| {
+            securebeam_core::Error::Transfer(format!("Compression finish error: {}", e))
+        })
     }
 
     pub fn decompress_data(&self, data: &[u8]) -> securebeam_core::Result<Vec<u8>> {
@@ -274,7 +286,8 @@ impl FileTransfer {
 
         let mut decoder = GzDecoder::new(data);
         let mut decompressed = Vec::new();
-        decoder.read_to_end(&mut decompressed)
+        decoder
+            .read_to_end(&mut decompressed)
             .map_err(|e| securebeam_core::Error::Transfer(format!("Decompression error: {}", e)))?;
         Ok(decompressed)
     }

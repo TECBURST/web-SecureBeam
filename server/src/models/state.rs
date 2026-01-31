@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use tokio::sync::{mpsc, RwLock};
 use uuid::Uuid;
 
-use super::{Nameplate, Mailbox, MailboxMessage, generate_nameplate_id};
+use super::{generate_nameplate_id, Mailbox, MailboxMessage, Nameplate};
 
 /// Sender for WebSocket messages
 pub type WsSender = mpsc::UnboundedSender<String>;
@@ -161,11 +161,7 @@ impl AppState {
         let mailbox_id = mailbox.id.clone();
 
         // Create nameplate
-        let nameplate = Nameplate::new(
-            nameplate_id.clone(),
-            mailbox_id.clone(),
-            self.timeout_secs,
-        );
+        let nameplate = Nameplate::new(nameplate_id.clone(), mailbox_id.clone(), self.timeout_secs);
 
         mailboxes.insert(mailbox_id, mailbox);
         nameplates.insert(nameplate_id.clone(), nameplate);
@@ -175,7 +171,12 @@ impl AppState {
     }
 
     /// Claim a nameplate
-    pub async fn claim_nameplate(&self, nameplate_id: &str, side: &str, appid: &str) -> Option<String> {
+    pub async fn claim_nameplate(
+        &self,
+        nameplate_id: &str,
+        side: &str,
+        appid: &str,
+    ) -> Option<String> {
         let mut nameplates = self.nameplates.write().await;
 
         // Check if nameplate exists
@@ -225,10 +226,7 @@ impl AppState {
     /// List all nameplates for an app
     pub async fn list_nameplates(&self, _appid: &str) -> Vec<String> {
         let nameplates = self.nameplates.read().await;
-        nameplates
-            .keys()
-            .cloned()
-            .collect()
+        nameplates.keys().cloned().collect()
     }
 
     // === Mailbox Management ===
@@ -247,7 +245,13 @@ impl AppState {
     }
 
     /// Add a message to a mailbox
-    pub async fn add_message(&self, mailbox_id: &str, side: &str, phase: &str, body: &str) -> Option<MailboxMessage> {
+    pub async fn add_message(
+        &self,
+        mailbox_id: &str,
+        side: &str,
+        phase: &str,
+        body: &str,
+    ) -> Option<MailboxMessage> {
         let mut mailboxes = self.mailboxes.write().await;
 
         if let Some(mb) = mailboxes.get_mut(mailbox_id) {
@@ -260,11 +264,17 @@ impl AppState {
     }
 
     /// Get messages from a mailbox for a specific side
-    pub async fn get_messages(&self, mailbox_id: &str, for_side: &str, after_id: u64) -> Vec<MailboxMessage> {
+    pub async fn get_messages(
+        &self,
+        mailbox_id: &str,
+        for_side: &str,
+        after_id: u64,
+    ) -> Vec<MailboxMessage> {
         let mailboxes = self.mailboxes.read().await;
 
         if let Some(mb) = mailboxes.get(mailbox_id) {
-            return mb.get_messages_after(after_id)
+            return mb
+                .get_messages_after(after_id)
                 .into_iter()
                 .filter(|m| m.side != for_side)
                 .cloned()

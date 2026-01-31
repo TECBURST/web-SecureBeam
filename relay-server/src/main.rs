@@ -37,7 +37,10 @@ async fn main() {
 
     let addr = format!("{}:{}", host, port);
 
-    tracing::info!("Starting SecureBeam Transit Relay Server v{}", env!("CARGO_PKG_VERSION"));
+    tracing::info!(
+        "Starting SecureBeam Transit Relay Server v{}",
+        env!("CARGO_PKG_VERSION")
+    );
     tracing::info!("Listening on {}", addr);
 
     // Create relay server

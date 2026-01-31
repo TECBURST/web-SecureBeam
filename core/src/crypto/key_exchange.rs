@@ -7,9 +7,9 @@
 //! - Passwords and shared keys are securely zeroed on drop
 //! - State machine prevents key reuse
 
+use crate::{Error, Result};
 use spake2::{Ed25519Group, Identity, Password, Spake2};
 use zeroize::Zeroizing;
-use crate::{Error, Result};
 
 /// SPAKE2 message to be exchanged between peers
 #[derive(Debug, Clone)]
@@ -46,9 +46,7 @@ enum ExchangeState {
         outgoing: Spake2Message,
     },
     /// Exchange completed successfully
-    Completed {
-        shared_key: Zeroizing<Vec<u8>>,
-    },
+    Completed { shared_key: Zeroizing<Vec<u8>> },
     /// Exchange failed
     Failed,
 }
@@ -91,10 +89,8 @@ impl Spake2Exchange {
         // The side is used later for key derivation, not for SPAKE2 itself
         let identity = Identity::new(b"");
 
-        let (spake, outgoing) = Spake2::<Ed25519Group>::start_symmetric(
-            &Password::new(&password),
-            &identity,
-        );
+        let (spake, outgoing) =
+            Spake2::<Ed25519Group>::start_symmetric(&Password::new(&password), &identity);
 
         let msg = Spake2Message(outgoing);
 
@@ -120,7 +116,11 @@ impl Spake2Exchange {
     pub fn finish(&mut self, peer_message: &Spake2Message) -> Result<Vec<u8>> {
         let spake = match std::mem::replace(&mut self.state, ExchangeState::Failed) {
             ExchangeState::WaitingForPeer { spake, .. } => spake,
-            _ => return Err(Error::Crypto("Invalid state: not waiting for peer".to_string())),
+            _ => {
+                return Err(Error::Crypto(
+                    "Invalid state: not waiting for peer".to_string(),
+                ))
+            }
         };
 
         let shared_key = spake
@@ -130,9 +130,7 @@ impl Spake2Exchange {
         let key = Zeroizing::new(shared_key.to_vec());
         let result = key.to_vec();
 
-        self.state = ExchangeState::Completed {
-            shared_key: key,
-        };
+        self.state = ExchangeState::Completed { shared_key: key };
 
         Ok(result)
     }

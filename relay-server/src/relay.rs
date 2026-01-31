@@ -52,7 +52,11 @@ impl RelayServer {
         // Parse handshake: "please relay {channel_id} for {side}\n"
         let (channel_id, side) = self.parse_handshake(&line)?;
 
-        tracing::info!("Relay request for channel {} from side {}", channel_id, side);
+        tracing::info!(
+            "Relay request for channel {} from side {}",
+            channel_id,
+            side
+        );
 
         // Send OK response
         stream.write_all(b"ok\n").await?;
@@ -65,17 +69,19 @@ impl RelayServer {
 
         if let Some(peer_conn) = peer {
             // Peer is waiting - connect them
-            tracing::info!("Connecting channel {} ({} <-> {})", channel_id, side, peer_conn.side);
+            tracing::info!(
+                "Connecting channel {} ({} <-> {})",
+                channel_id,
+                side,
+                peer_conn.side
+            );
             self.relay_streams(stream, peer_conn.stream).await?;
         } else {
             // No peer yet - wait for them
             tracing::debug!("Waiting for peer on channel {}", channel_id);
 
             let mut pending = self.pending.write().await;
-            pending.insert(channel_id.clone(), PendingConnection {
-                stream,
-                side,
-            });
+            pending.insert(channel_id.clone(), PendingConnection { stream, side });
 
             // TODO: Add timeout for pending connections
         }
@@ -152,13 +158,9 @@ impl RelayServer {
         let (mut read2, mut write2) = stream2.into_split();
 
         // Spawn two tasks to copy data in both directions
-        let task1 = tokio::spawn(async move {
-            tokio::io::copy(&mut read1, &mut write2).await
-        });
+        let task1 = tokio::spawn(async move { tokio::io::copy(&mut read1, &mut write2).await });
 
-        let task2 = tokio::spawn(async move {
-            tokio::io::copy(&mut read2, &mut write1).await
-        });
+        let task2 = tokio::spawn(async move { tokio::io::copy(&mut read2, &mut write1).await });
 
         // Wait for either direction to finish
         tokio::select! {
@@ -206,6 +208,8 @@ mod tests {
 
         // Invalid format
         assert!(relay.parse_handshake("invalid").is_err());
-        assert!(relay.parse_handshake("please relay short for sender").is_err());
+        assert!(relay
+            .parse_handshake("please relay short for sender")
+            .is_err());
     }
 }

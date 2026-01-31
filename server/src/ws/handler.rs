@@ -2,7 +2,6 @@
 //!
 //! Implements the Magic Wormhole server protocol over WebSocket.
 
-use std::sync::Arc;
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
@@ -11,10 +10,11 @@ use axum::{
     response::IntoResponse,
 };
 use futures::{sink::SinkExt, stream::StreamExt};
+use std::sync::Arc;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
-use crate::models::{AppState, ClientMessage, ServerMessage, NameplateInfo};
+use crate::models::{AppState, ClientMessage, NameplateInfo, ServerMessage};
 
 /// WebSocket upgrade handler
 pub async fn ws_handler(
@@ -37,7 +37,11 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
 
     // Send welcome message
     let welcome = ServerMessage::welcome();
-    if sender.send(Message::Text(welcome.to_json().into())).await.is_err() {
+    if sender
+        .send(Message::Text(welcome.to_json().into()))
+        .await
+        .is_err()
+    {
         tracing::error!("Failed to send welcome message");
         state.unregister_client(client_id).await;
         return;
@@ -92,21 +96,26 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
 }
 
 /// Handle an incoming message
-async fn handle_message(
-    state: &Arc<AppState>,
-    client_id: Uuid,
-    text: &str,
-) -> Result<(), String> {
-    let message: ClientMessage = serde_json::from_str(text)
-        .map_err(|e| format!("Invalid message format: {}", e))?;
+async fn handle_message(state: &Arc<AppState>, client_id: Uuid, text: &str) -> Result<(), String> {
+    let message: ClientMessage =
+        serde_json::from_str(text).map_err(|e| format!("Invalid message format: {}", e))?;
 
-    let sender = state.get_client_sender(client_id).await
+    let sender = state
+        .get_client_sender(client_id)
+        .await
         .ok_or("Client not found")?;
 
     match message {
         ClientMessage::Bind { appid, side } => {
-            state.bind_client(client_id, appid.clone(), side.clone()).await;
-            tracing::debug!("Client {} bound to app {} as side {}", client_id, appid, side);
+            state
+                .bind_client(client_id, appid.clone(), side.clone())
+                .await;
+            tracing::debug!(
+                "Client {} bound to app {} as side {}",
+                client_id,
+                appid,
+                side
+            );
 
             // Send ack
             let ack = ServerMessage::Ack;
@@ -114,19 +123,20 @@ async fn handle_message(
         }
 
         ClientMessage::List => {
-            let appid = state.get_client_appid(client_id).await
-                .ok_or("Not bound")?;
+            let appid = state.get_client_appid(client_id).await.ok_or("Not bound")?;
 
             let nameplates = state.list_nameplates(&appid).await;
             let response = ServerMessage::Nameplates {
-                nameplates: nameplates.into_iter().map(|id| NameplateInfo { id }).collect(),
+                nameplates: nameplates
+                    .into_iter()
+                    .map(|id| NameplateInfo { id })
+                    .collect(),
             };
             let _ = sender.send(response.to_json());
         }
 
         ClientMessage::Allocate => {
-            let appid = state.get_client_appid(client_id).await
-                .ok_or("Not bound")?;
+            let appid = state.get_client_appid(client_id).await.ok_or("Not bound")?;
 
             let nameplate = state.allocate_nameplate(&appid).await;
             let response = ServerMessage::Allocated { nameplate };
@@ -134,21 +144,22 @@ async fn handle_message(
         }
 
         ClientMessage::Claim { nameplate } => {
-            let appid = state.get_client_appid(client_id).await
-                .ok_or("Not bound")?;
-            let side = state.get_client_side(client_id).await
-                .ok_or("Not bound")?;
+            let appid = state.get_client_appid(client_id).await.ok_or("Not bound")?;
+            let side = state.get_client_side(client_id).await.ok_or("Not bound")?;
 
-            let mailbox_id = state.claim_nameplate(&nameplate, &side, &appid).await
+            let mailbox_id = state
+                .claim_nameplate(&nameplate, &side, &appid)
+                .await
                 .ok_or("Failed to claim nameplate")?;
 
-            let response = ServerMessage::Claimed { mailbox: mailbox_id };
+            let response = ServerMessage::Claimed {
+                mailbox: mailbox_id,
+            };
             let _ = sender.send(response.to_json());
         }
 
         ClientMessage::Release { nameplate } => {
-            let side = state.get_client_side(client_id).await
-                .ok_or("Not bound")?;
+            let side = state.get_client_side(client_id).await.ok_or("Not bound")?;
 
             if let Some(np) = nameplate {
                 state.release_nameplate(&np, &side).await;
@@ -159,8 +170,7 @@ async fn handle_message(
         }
 
         ClientMessage::Open { mailbox } => {
-            let side = state.get_client_side(client_id).await
-                .ok_or("Not bound")?;
+            let side = state.get_client_side(client_id).await.ok_or("Not bound")?;
 
             if !state.open_mailbox(&mailbox, &side).await {
                 return Err("Failed to open mailbox".to_string());
@@ -188,17 +198,19 @@ async fn handle_message(
         }
 
         ClientMessage::Add { phase, body } => {
-            let side = state.get_client_side(client_id).await
-                .ok_or("Not bound")?;
+            let side = state.get_client_side(client_id).await.ok_or("Not bound")?;
 
             // Get mailbox ID from client connection
             let clients = state.clients.read().await;
-            let mailbox_id = clients.get(&client_id)
+            let mailbox_id = clients
+                .get(&client_id)
                 .and_then(|c| c.mailbox_id.clone())
                 .ok_or("No mailbox open")?;
             drop(clients);
 
-            let msg = state.add_message(&mailbox_id, &side, &phase, &body).await
+            let msg = state
+                .add_message(&mailbox_id, &side, &phase, &body)
+                .await
                 .ok_or("Failed to add message")?;
 
             // Send ack to sender
@@ -212,19 +224,21 @@ async fn handle_message(
                 body: msg.body,
                 id: msg.id,
             };
-            state.broadcast_to_mailbox(&mailbox_id, &side, &broadcast.to_json()).await;
+            state
+                .broadcast_to_mailbox(&mailbox_id, &side, &broadcast.to_json())
+                .await;
         }
 
         ClientMessage::Close { mailbox, mood: _ } => {
-            let side = state.get_client_side(client_id).await
-                .ok_or("Not bound")?;
+            let side = state.get_client_side(client_id).await.ok_or("Not bound")?;
 
             // Get mailbox ID
             let mailbox_id = if let Some(mb) = mailbox {
                 mb
             } else {
                 let clients = state.clients.read().await;
-                clients.get(&client_id)
+                clients
+                    .get(&client_id)
                     .and_then(|c| c.mailbox_id.clone())
                     .ok_or("No mailbox to close")?
             };

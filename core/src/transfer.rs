@@ -11,14 +11,14 @@
 //! - Constant-time hash comparison
 //! - Size limits to prevent DoS
 
+use sha2::{Digest, Sha256};
 use std::io::{Read, Write};
 use std::path::Path;
-use sha2::{Sha256, Digest};
 use subtle::ConstantTimeEq;
 
-use crate::{Error, Result};
 use crate::protocol::FileOffer;
 use crate::transit::TransitConnection;
+use crate::{Error, Result};
 
 /// Default chunk size for file transfers (64 KB)
 pub const DEFAULT_CHUNK_SIZE: usize = 64 * 1024;
@@ -31,10 +31,8 @@ pub const MAX_DIRECTORY_FILES: u64 = 100_000;
 
 /// File extensions that are already compressed (don't GZIP these)
 const COMPRESSED_EXTENSIONS: &[&str] = &[
-    "zip", "gz", "bz2", "xz", "7z", "rar",
-    "jpg", "jpeg", "png", "gif", "webp", "avif",
-    "mp3", "mp4", "mkv", "avi", "mov", "webm",
-    "pdf", "docx", "xlsx", "pptx",
+    "zip", "gz", "bz2", "xz", "7z", "rar", "jpg", "jpeg", "png", "gif", "webp", "avif", "mp3",
+    "mp4", "mkv", "avi", "mov", "webm", "pdf", "docx", "xlsx", "pptx",
 ];
 
 /// Transfer progress information
@@ -132,7 +130,13 @@ impl FileTransfer {
             None
         };
 
-        Ok(FileOffer::file(filename, file_size, Some(hash), compressed, original_size_opt))
+        Ok(FileOffer::file(
+            filename,
+            file_size,
+            Some(hash),
+            compressed,
+            original_size_opt,
+        ))
     }
 
     /// Prepare an offer for a directory
@@ -156,7 +160,13 @@ impl FileTransfer {
         let archive_data = self.create_tar_archive(path, true).await?;
         let archive_size = archive_data.len() as u64;
 
-        Ok(FileOffer::directory(dir_name, num_files, num_bytes, archive_size, true))
+        Ok(FileOffer::directory(
+            dir_name,
+            num_files,
+            num_bytes,
+            archive_size,
+            true,
+        ))
     }
 
     /// Send a file over a transit connection
@@ -252,7 +262,9 @@ impl FileTransfer {
 
         // Security: Validate transfer size
         if total_size > MAX_TRANSFER_SIZE {
-            return Err(Error::Transfer("File size exceeds maximum allowed".to_string()));
+            return Err(Error::Transfer(
+                "File size exceeds maximum allowed".to_string(),
+            ));
         }
 
         let mut progress = TransferProgress::new(total_size);
@@ -269,7 +281,9 @@ impl FileTransfer {
 
             // Security: Check we don't exceed the declared size
             if data.len() + chunk.len() > (total_size as usize) + self.chunk_size {
-                return Err(Error::Transfer("Received more data than declared".to_string()));
+                return Err(Error::Transfer(
+                    "Received more data than declared".to_string(),
+                ));
             }
 
             data.extend_from_slice(&chunk);
@@ -309,7 +323,9 @@ impl FileTransfer {
 
         // Security: Validate transfer size
         if total_size > MAX_TRANSFER_SIZE {
-            return Err(Error::Transfer("Archive size exceeds maximum allowed".to_string()));
+            return Err(Error::Transfer(
+                "Archive size exceeds maximum allowed".to_string(),
+            ));
         }
 
         let mut progress = TransferProgress::new(total_size);
@@ -326,7 +342,9 @@ impl FileTransfer {
 
             // Security: Check we don't exceed the declared size
             if data.len() + chunk.len() > (total_size as usize) + self.chunk_size {
-                return Err(Error::Transfer("Received more data than declared".to_string()));
+                return Err(Error::Transfer(
+                    "Received more data than declared".to_string(),
+                ));
             }
 
             data.extend_from_slice(&chunk);
@@ -372,9 +390,11 @@ impl FileTransfer {
         use flate2::Compression;
 
         let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
-        encoder.write_all(data)
+        encoder
+            .write_all(data)
             .map_err(|e| Error::Transfer(format!("Compression error: {}", e)))?;
-        encoder.finish()
+        encoder
+            .finish()
             .map_err(|e| Error::Transfer(format!("Compression finish error: {}", e)))
     }
 
@@ -384,7 +404,8 @@ impl FileTransfer {
 
         let mut decoder = GzDecoder::new(data);
         let mut decompressed = Vec::new();
-        decoder.read_to_end(&mut decompressed)
+        decoder
+            .read_to_end(&mut decompressed)
             .map_err(|e| Error::Transfer(format!("Decompression error: {}", e)))?;
         Ok(decompressed)
     }
@@ -396,9 +417,8 @@ impl FileTransfer {
         let path = path.as_ref().to_path_buf();
 
         // TAR creation is blocking, so run in a blocking thread
-        let archive_data = tokio::task::spawn_blocking(move || {
-            Self::create_tar_blocking(&path)
-        }).await
+        let archive_data = tokio::task::spawn_blocking(move || Self::create_tar_blocking(&path))
+            .await
             .map_err(|e| Error::Transfer(format!("TAR task error: {}", e)))??;
 
         if compress {
@@ -412,14 +432,17 @@ impl FileTransfer {
     fn create_tar_blocking(path: &Path) -> Result<Vec<u8>> {
         let mut builder = tar::Builder::new(Vec::new());
 
-        let dir_name = path.file_name()
+        let dir_name = path
+            .file_name()
             .and_then(|n| n.to_str())
             .ok_or_else(|| Error::Transfer("Invalid directory name".to_string()))?;
 
-        builder.append_dir_all(dir_name, path)
+        builder
+            .append_dir_all(dir_name, path)
             .map_err(|e| Error::Transfer(format!("TAR append error: {}", e)))?;
 
-        builder.into_inner()
+        builder
+            .into_inner()
             .map_err(|e| Error::Transfer(format!("TAR finish error: {}", e)))
     }
 
@@ -431,26 +454,30 @@ impl FileTransfer {
         let mut archive = tar::Archive::new(data);
 
         // Create the destination directory if it doesn't exist
-        let dest_canonical = dest_path.canonicalize()
+        let dest_canonical = dest_path
+            .canonicalize()
             .or_else(|_| {
                 std::fs::create_dir_all(dest_path)?;
                 dest_path.canonicalize()
             })
             .map_err(|e| Error::Transfer(format!("Invalid destination path: {}", e)))?;
 
-        for entry in archive.entries()
-            .map_err(|e| Error::Transfer(format!("TAR read error: {}", e)))? {
+        for entry in archive
+            .entries()
+            .map_err(|e| Error::Transfer(format!("TAR read error: {}", e)))?
+        {
+            let mut entry =
+                entry.map_err(|e| Error::Transfer(format!("TAR entry error: {}", e)))?;
 
-            let mut entry = entry
-                .map_err(|e| Error::Transfer(format!("TAR entry error: {}", e)))?;
-
-            let entry_path = entry.path()
+            let entry_path = entry
+                .path()
                 .map_err(|e| Error::Transfer(format!("TAR path error: {}", e)))?;
 
             // Security: Validate the entry path to prevent path traversal
             let full_path = dest_canonical.join(&entry_path);
             let full_path_canonical = if full_path.exists() {
-                full_path.canonicalize()
+                full_path
+                    .canonicalize()
                     .map_err(|e| Error::Transfer(format!("Path error: {}", e)))?
             } else {
                 // For new files, check that all parent components are safe
@@ -463,7 +490,7 @@ impl FileTransfer {
                         std::path::Component::ParentDir => {
                             // SECURITY: Reject any path with ".." components
                             return Err(Error::Transfer(
-                                "Path traversal attempt detected in archive".to_string()
+                                "Path traversal attempt detected in archive".to_string(),
                             ));
                         }
                         _ => continue,
@@ -475,7 +502,7 @@ impl FileTransfer {
             // Verify the resolved path is inside the destination directory
             if !full_path_canonical.starts_with(&dest_canonical) {
                 return Err(Error::Transfer(
-                    "Path traversal attempt detected in archive".to_string()
+                    "Path traversal attempt detected in archive".to_string(),
                 ));
             }
 
@@ -486,7 +513,8 @@ impl FileTransfer {
             }
 
             // Extract the entry
-            entry.unpack(&full_path_canonical)
+            entry
+                .unpack(&full_path_canonical)
                 .map_err(|e| Error::Transfer(format!("TAR unpack error: {}", e)))?;
         }
 
@@ -513,7 +541,11 @@ impl FileTransfer {
     ///
     /// This prevents timing attacks where an attacker could learn about the
     /// expected hash by measuring comparison time.
-    pub async fn verify_file_hash<P: AsRef<Path>>(&self, path: P, expected_hash: &str) -> Result<bool> {
+    pub async fn verify_file_hash<P: AsRef<Path>>(
+        &self,
+        path: P,
+        expected_hash: &str,
+    ) -> Result<bool> {
         let actual_hash = self.compute_file_hash(path).await?;
 
         // Use constant-time comparison to prevent timing attacks
@@ -533,9 +565,8 @@ impl FileTransfer {
     async fn count_directory_contents<P: AsRef<Path>>(&self, path: P) -> Result<(u64, u64)> {
         let path = path.as_ref().to_path_buf();
 
-        tokio::task::spawn_blocking(move || {
-            Self::count_directory_blocking(&path)
-        }).await
+        tokio::task::spawn_blocking(move || Self::count_directory_blocking(&path))
+            .await
             .map_err(|e| Error::Transfer(format!("Count task error: {}", e)))?
     }
 
@@ -545,8 +576,10 @@ impl FileTransfer {
 
         fn walk_dir(path: &Path, num_files: &mut u64, num_bytes: &mut u64) -> Result<()> {
             for entry in std::fs::read_dir(path)
-                .map_err(|e| Error::Transfer(format!("Read dir error: {}", e)))? {
-                let entry = entry.map_err(|e| Error::Transfer(format!("Dir entry error: {}", e)))?;
+                .map_err(|e| Error::Transfer(format!("Read dir error: {}", e)))?
+            {
+                let entry =
+                    entry.map_err(|e| Error::Transfer(format!("Dir entry error: {}", e)))?;
                 let entry_path = entry.path();
 
                 if entry_path.is_file() {
@@ -611,7 +644,10 @@ mod tests {
         let hash = transfer.compute_hash(data);
 
         // Known SHA-256 hash for "Hello, World!"
-        assert_eq!(hash, "dffd6021bb2bd5b0af676290809ec3a53191dd81c7f70a4b28688a362182986f");
+        assert_eq!(
+            hash,
+            "dffd6021bb2bd5b0af676290809ec3a53191dd81c7f70a4b28688a362182986f"
+        );
     }
 
     #[test]

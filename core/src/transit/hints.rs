@@ -45,7 +45,8 @@ impl TransitHints {
 
     /// Sort direct hints by priority (higher = better)
     pub fn sort_by_priority(&mut self) {
-        self.direct_hints.sort_by(|a, b| b.priority.cmp(&a.priority));
+        self.direct_hints
+            .sort_by(|a, b| b.priority.cmp(&a.priority));
     }
 }
 

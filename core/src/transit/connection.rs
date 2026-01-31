@@ -3,11 +3,11 @@
 //! Provides a unified interface for encrypted transit connections,
 //! whether they are direct or via relay.
 
-use tokio::io::{AsyncRead, AsyncWrite, AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::TcpStream;
 
-use crate::{Error, Result};
 use crate::crypto::SecretBox;
+use crate::{Error, Result};
 
 /// Role in the transit connection
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -182,7 +182,7 @@ pub async fn perform_handshake(
     role: TransitRole,
     transit_key: &[u8],
 ) -> Result<()> {
-    use sha2::{Sha256, Digest};
+    use sha2::{Digest, Sha256};
 
     // Compute transit key hash
     let mut hasher = Sha256::new();

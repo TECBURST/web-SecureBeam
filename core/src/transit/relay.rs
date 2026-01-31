@@ -2,16 +2,16 @@
 //!
 //! Connects to a relay server when direct connections fail.
 
+use sha2::{Digest, Sha256};
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::time::timeout;
-use sha2::{Sha256, Digest};
 
-use crate::{Error, Result};
+use super::connection::{perform_handshake, TransitConnection, TransitRole};
 use super::hints::RelayHint;
-use super::connection::{TransitConnection, TransitRole, perform_handshake};
 use super::HANDSHAKE_TIMEOUT_SECS;
+use crate::{Error, Result};
 
 /// Read a line from the stream (until newline)
 async fn read_line(stream: &mut TcpStream) -> Result<String> {
@@ -19,7 +19,9 @@ async fn read_line(stream: &mut TcpStream) -> Result<String> {
     let mut byte = [0u8; 1];
 
     loop {
-        let n = stream.read(&mut byte).await
+        let n = stream
+            .read(&mut byte)
+            .await
             .map_err(|e| Error::Connection(format!("Read failed: {}", e)))?;
         if n == 0 {
             break; // EOF
@@ -43,7 +45,8 @@ pub async fn connect_via_relay(
     relay: &RelayHint,
     transit_key: &[u8],
 ) -> Result<TransitConnection> {
-    let (host, port) = relay.parse()
+    let (host, port) = relay
+        .parse()
         .ok_or_else(|| Error::Connection(format!("Invalid relay URL: {}", relay.url)))?;
 
     let addr = format!("{}:{}", host, port);
@@ -52,7 +55,8 @@ pub async fn connect_via_relay(
     let timeout_duration = Duration::from_secs(HANDSHAKE_TIMEOUT_SECS);
 
     // Connect to relay
-    let mut stream = timeout(timeout_duration, TcpStream::connect(&addr)).await
+    let mut stream = timeout(timeout_duration, TcpStream::connect(&addr))
+        .await
         .map_err(|_| Error::Connection("Relay connect timed out".to_string()))?
         .map_err(|e| Error::Connection(format!("Relay connect failed: {}", e)))?;
 
@@ -72,15 +76,21 @@ pub async fn connect_via_relay(
     // Send relay handshake
     let handshake = format!("please relay {} for {}\n", channel_id, side);
 
-    stream.write_all(handshake.as_bytes()).await
+    stream
+        .write_all(handshake.as_bytes())
+        .await
         .map_err(|e| Error::Connection(format!("Relay handshake write failed: {}", e)))?;
 
     // Read relay response (read byte by byte to avoid borrowing issues)
-    let response = timeout(timeout_duration, read_line(&mut stream)).await
+    let response = timeout(timeout_duration, read_line(&mut stream))
+        .await
         .map_err(|_| Error::Connection("Relay response timed out".to_string()))??;
 
     if response.trim() != "ok" {
-        return Err(Error::Connection(format!("Relay rejected: {}", response.trim())));
+        return Err(Error::Connection(format!(
+            "Relay rejected: {}",
+            response.trim()
+        )));
     }
 
     tracing::debug!("Relay accepted, performing transit handshake");

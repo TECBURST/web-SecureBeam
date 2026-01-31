@@ -7,18 +7,15 @@ mod handlers;
 mod models;
 mod ws;
 
+use axum::{routing::get, Router};
 use std::sync::Arc;
-use axum::{
-    routing::get,
-    Router,
-};
-use tower_http::cors::{CorsLayer, Any};
+use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::config::Config;
-use crate::models::AppState;
 use crate::handlers::health_check;
+use crate::models::AppState;
 use crate::ws::ws_handler;
 
 #[tokio::main]
@@ -35,7 +32,10 @@ async fn main() {
     // Load configuration
     let config = Config::from_env();
 
-    tracing::info!("Starting SecureBeam Mailbox Server v{}", env!("CARGO_PKG_VERSION"));
+    tracing::info!(
+        "Starting SecureBeam Mailbox Server v{}",
+        env!("CARGO_PKG_VERSION")
+    );
     tracing::info!("Listening on {}:{}", config.host, config.port);
 
     // Create shared state

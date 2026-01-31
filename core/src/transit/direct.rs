@@ -6,10 +6,10 @@ use std::time::Duration;
 use tokio::net::TcpStream;
 use tokio::time::timeout;
 
-use crate::{Error, Result};
+use super::connection::{perform_handshake, TransitConnection, TransitRole};
 use super::hints::DirectHint;
-use super::connection::{TransitConnection, TransitRole, perform_handshake};
 use super::HANDSHAKE_TIMEOUT_SECS;
+use crate::{Error, Result};
 
 /// Try to establish a direct connection using the given hints
 pub async fn try_direct_connection(
@@ -24,7 +24,12 @@ pub async fn try_direct_connection(
         let addr = hint.to_addr_string();
         tracing::debug!("Trying direct connection to {}", addr);
 
-        match timeout(timeout_duration, try_single_connection(&addr, role, transit_key)).await {
+        match timeout(
+            timeout_duration,
+            try_single_connection(&addr, role, transit_key),
+        )
+        .await
+        {
             Ok(Ok(conn)) => {
                 tracing::info!("Direct connection successful to {}", addr);
                 return Ok(conn);
@@ -38,7 +43,9 @@ pub async fn try_direct_connection(
         }
     }
 
-    Err(Error::Connection("All direct connection attempts failed".to_string()))
+    Err(Error::Connection(
+        "All direct connection attempts failed".to_string(),
+    ))
 }
 
 /// Try a single direct connection
@@ -48,7 +55,8 @@ async fn try_single_connection(
     transit_key: &[u8],
 ) -> Result<TransitConnection> {
     // Connect
-    let mut stream = TcpStream::connect(addr).await
+    let mut stream = TcpStream::connect(addr)
+        .await
         .map_err(|e| Error::Connection(format!("Connect failed: {}", e)))?;
 
     // Perform handshake
@@ -66,7 +74,8 @@ pub async fn listen_for_direct(
 ) -> Result<TransitConnection> {
     use tokio::net::TcpListener;
 
-    let listener = TcpListener::bind(format!("0.0.0.0:{}", port)).await
+    let listener = TcpListener::bind(format!("0.0.0.0:{}", port))
+        .await
         .map_err(|e| Error::Connection(format!("Bind failed: {}", e)))?;
 
     tracing::debug!("Listening for direct connections on port {}", port);

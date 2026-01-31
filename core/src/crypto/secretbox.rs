@@ -8,12 +8,12 @@
 //! - Constant-time comparisons for sensitive data
 //! - Random nonce generation for each encryption
 
+use rand::RngCore;
+use subtle::ConstantTimeEq;
 use xsalsa20poly1305::{
     aead::{Aead, KeyInit},
     XSalsa20Poly1305,
 };
-use rand::RngCore;
-use subtle::ConstantTimeEq;
 use zeroize::ZeroizeOnDrop;
 
 use crate::{Error, Result};
@@ -106,7 +106,9 @@ impl SecretBox {
     pub fn decrypt(&self, nonce: &Nonce, ciphertext: &[u8]) -> Result<Vec<u8>> {
         self.cipher
             .decrypt((&nonce.0).into(), ciphertext)
-            .map_err(|_| Error::Crypto("Decryption failed - invalid ciphertext or wrong key".to_string()))
+            .map_err(|_| {
+                Error::Crypto("Decryption failed - invalid ciphertext or wrong key".to_string())
+            })
     }
 
     /// Encrypt and prepend the nonce to the ciphertext

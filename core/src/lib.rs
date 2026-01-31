@@ -25,21 +25,20 @@
 //! - Input validation with size limits
 
 pub mod crypto;
+pub mod network;
 pub mod protocol;
 pub mod transfer;
 pub mod transit;
-pub mod network;
 
 // Re-export commonly used types
 pub use crypto::{
-    Spake2Exchange, Spake2Message,
-    SecretBox, Nonce,
-    derive_key, derive_phase_key, derive_verifier, Purpose,
+    derive_key, derive_phase_key, derive_verifier, Nonce, Purpose, SecretBox, Spake2Exchange,
+    Spake2Message,
 };
-pub use protocol::{Message, FileOffer, FileAnswer, OfferType};
-pub use transfer::{FileTransfer, TransferProgress};
-pub use transit::{TransitConnection, TransitRole, TransitHints, establish_transit};
 pub use network::SignalingClient;
+pub use protocol::{FileAnswer, FileOffer, Message, OfferType};
+pub use transfer::{FileTransfer, TransferProgress};
+pub use transit::{establish_transit, TransitConnection, TransitHints, TransitRole};
 
 /// Library version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

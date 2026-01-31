@@ -11,26 +11,17 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "snake_case")]
 pub enum ClientMessage {
     /// Bind to an application ID
-    Bind {
-        appid: String,
-        side: String,
-    },
+    Bind { appid: String, side: String },
     /// List nameplates (optional, for UI)
     List,
     /// Allocate a new nameplate
     Allocate,
     /// Claim an existing nameplate
-    Claim {
-        nameplate: String,
-    },
+    Claim { nameplate: String },
     /// Release a nameplate
-    Release {
-        nameplate: Option<String>,
-    },
+    Release { nameplate: Option<String> },
     /// Open a mailbox
-    Open {
-        mailbox: String,
-    },
+    Open { mailbox: String },
     /// Add a message to the mailbox
     Add {
         phase: String,
@@ -42,9 +33,7 @@ pub enum ClientMessage {
         mood: Option<String>,
     },
     /// Ping to keep connection alive
-    Ping {
-        ping: i64,
-    },
+    Ping { ping: i64 },
 }
 
 /// All messages from server to client
@@ -53,21 +42,13 @@ pub enum ClientMessage {
 #[serde(rename_all = "snake_case")]
 pub enum ServerMessage {
     /// Welcome message on connection
-    Welcome {
-        welcome: WelcomeInfo,
-    },
+    Welcome { welcome: WelcomeInfo },
     /// List of nameplates
-    Nameplates {
-        nameplates: Vec<NameplateInfo>,
-    },
+    Nameplates { nameplates: Vec<NameplateInfo> },
     /// Nameplate was allocated
-    Allocated {
-        nameplate: String,
-    },
+    Allocated { nameplate: String },
     /// Nameplate was claimed
-    Claimed {
-        mailbox: String,
-    },
+    Claimed { mailbox: String },
     /// Nameplate was released
     Released,
     /// A message was received
@@ -80,9 +61,7 @@ pub enum ServerMessage {
     /// Mailbox was closed
     Closed,
     /// Pong response
-    Pong {
-        pong: i64,
-    },
+    Pong { pong: i64 },
     /// Acknowledgement
     Ack,
     /// Error occurred

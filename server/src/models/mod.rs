@@ -1,9 +1,9 @@
-mod state;
+mod mailbox;
 mod messages;
 mod nameplate;
-mod mailbox;
+mod state;
 
-pub use state::AppState;
-pub use messages::{ClientMessage, ServerMessage, WelcomeInfo, NameplateInfo, Mood};
-pub use nameplate::{Nameplate, generate_nameplate_id};
 pub use mailbox::{Mailbox, MailboxMessage};
+pub use messages::{ClientMessage, Mood, NameplateInfo, ServerMessage, WelcomeInfo};
+pub use nameplate::{generate_nameplate_id, Nameplate};
+pub use state::AppState;

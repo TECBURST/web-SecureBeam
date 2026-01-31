@@ -6,14 +6,14 @@
 //!
 //! The transit is encrypted using a key derived from the wormhole session.
 
-mod hints;
-mod direct;
-mod relay;
 mod connection;
+mod direct;
+mod hints;
+mod relay;
 
-pub use hints::{TransitHints, DirectHint, RelayHint};
 pub use connection::{TransitConnection, TransitRole};
 pub use direct::try_direct_connection;
+pub use hints::{DirectHint, RelayHint, TransitHints};
 pub use relay::connect_via_relay;
 
 use crate::{Error, Result};
@@ -34,7 +34,10 @@ pub async fn establish_transit(
 ) -> Result<TransitConnection> {
     // Try direct connections first
     if !hints.direct_hints.is_empty() {
-        tracing::info!("Trying {} direct connection hints", hints.direct_hints.len());
+        tracing::info!(
+            "Trying {} direct connection hints",
+            hints.direct_hints.len()
+        );
 
         match try_direct_connection(role, &hints.direct_hints, transit_key).await {
             Ok(conn) => {
@@ -64,5 +67,7 @@ pub async fn establish_transit(
         }
     }
 
-    Err(Error::Connection("All transit connection attempts failed".to_string()))
+    Err(Error::Connection(
+        "All transit connection attempts failed".to_string(),
+    ))
 }

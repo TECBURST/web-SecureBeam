@@ -1,9 +1,9 @@
 //! Network abstractions for SecureBeam
 
 use futures::{SinkExt, StreamExt};
+use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
-use serde::{Deserialize, Serialize};
 
 use crate::{Error, Result};
 
@@ -46,7 +46,8 @@ impl SignalingClient {
 
     /// Connect to a session using WebSocket
     pub async fn connect(&self, code: &str) -> Result<SessionConnection> {
-        let ws_url = self.server_url
+        let ws_url = self
+            .server_url
             .replace("http://", "ws://")
             .replace("https://", "wss://");
         let url = format!("{}/ws/{}", ws_url, code);
@@ -77,8 +78,15 @@ pub struct SessionInfo {
 
 /// Active connection to a session
 pub struct SessionConnection {
-    write: Box<dyn futures::Sink<Message, Error = tokio_tungstenite::tungstenite::Error> + Unpin + Send>,
-    read: Box<dyn futures::Stream<Item = std::result::Result<Message, tokio_tungstenite::tungstenite::Error>> + Unpin + Send>,
+    write: Box<
+        dyn futures::Sink<Message, Error = tokio_tungstenite::tungstenite::Error> + Unpin + Send,
+    >,
+    read: Box<
+        dyn futures::Stream<
+                Item = std::result::Result<Message, tokio_tungstenite::tungstenite::Error>,
+            > + Unpin
+            + Send,
+    >,
     sender: mpsc::UnboundedSender<String>,
     receiver: mpsc::UnboundedReceiver<String>,
 }

@@ -10,18 +10,18 @@
 //! - Constant-time comparisons for cryptographic operations
 //! - Secure random number generation
 
+mod derive;
 mod key_exchange;
 mod secretbox;
-mod derive;
 
-pub use key_exchange::{Spake2Exchange, Spake2Message, Side};
-pub use secretbox::{SecretBox, Nonce, NONCE_SIZE, KEY_SIZE, constant_time_eq};
-pub use derive::{derive_key, derive_phase_key, derive_verifier, Purpose, format_verifier};
+pub use derive::{derive_key, derive_phase_key, derive_verifier, format_verifier, Purpose};
+pub use key_exchange::{Side, Spake2Exchange, Spake2Message};
+pub use secretbox::{constant_time_eq, Nonce, SecretBox, KEY_SIZE, NONCE_SIZE};
 pub use zeroize::Zeroizing;
 
 /// Compute SHA256 hash and return as hex string
 pub fn sha256_hex(data: &[u8]) -> String {
-    use sha2::{Sha256, Digest};
+    use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
     hasher.update(data);
     let result = hasher.finalize();

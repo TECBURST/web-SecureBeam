@@ -9,8 +9,8 @@ use hkdf::Hkdf;
 use sha2::Sha256;
 use zeroize::Zeroize;
 
-use crate::Result;
 use super::KEY_SIZE;
+use crate::Result;
 
 /// Purpose for key derivation
 #[derive(Debug, Clone)]
@@ -54,7 +54,8 @@ pub fn derive_key(shared_key: &[u8], purpose: &Purpose, length: usize) -> Result
     let mut info = purpose.to_info();
 
     let mut output = vec![0u8; length];
-    let result = hkdf.expand(&info, &mut output)
+    let result = hkdf
+        .expand(&info, &mut output)
         .map_err(|_| crate::Error::Crypto("HKDF expansion failed".to_string()));
 
     // Zeroize the info string as it may contain sensitive context
@@ -96,7 +97,7 @@ pub fn derive_verifier(shared_key: &[u8]) -> Result<[u8; KEY_SIZE]> {
 
 /// Compute SHA256 and return as hex string
 fn sha256_hex(data: &[u8]) -> String {
-    use sha2::{Sha256, Digest};
+    use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
     hasher.update(data);
     let result = hasher.finalize();
@@ -164,21 +165,16 @@ mod tests {
 
     #[test]
     fn test_purpose_info_strings() {
-        assert_eq!(
-            Purpose::Verifier.to_info(),
-            b"wormhole:verifier".to_vec()
-        );
+        assert_eq!(Purpose::Verifier.to_info(), b"wormhole:verifier".to_vec());
 
-        assert_eq!(
-            Purpose::Transit.to_info(),
-            b"transit:key".to_vec()
-        );
+        assert_eq!(Purpose::Transit.to_info(), b"transit:key".to_vec());
 
         // Phase info should include hashed side and phase
         let phase_info = Purpose::Phase {
             side: "test".to_string(),
             phase: "pake".to_string(),
-        }.to_info();
+        }
+        .to_info();
         let info_str = String::from_utf8(phase_info).unwrap();
         assert!(info_str.starts_with("wormhole:phase:"));
     }
