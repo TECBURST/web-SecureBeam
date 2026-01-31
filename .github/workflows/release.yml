@@ -3,7 +3,6 @@ name: Release
 on:
   push:
     tags:
-      # Nur semantic versioning Tags: v1.0.0, v1.0.1, v2.0.0, etc.
       - 'v[0-9]+.[0-9]+.[0-9]+'
   workflow_dispatch:
     inputs:
@@ -20,7 +19,11 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  # Validate version format
+  # ============================================
+  # STAGE 1: Validate & Lint (Gate)
+  # If this fails, nothing else runs
+  # ============================================
+
   validate:
     name: Validate Release
     runs-on: ubuntu-latest
@@ -35,20 +38,85 @@ jobs:
           else
             VERSION="${GITHUB_REF#refs/tags/v}"
           fi
-
-          # Validate semver format
           if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Error: Version '$VERSION' is not valid semver (expected: X.Y.Z)"
+            echo "Error: Version '$VERSION' is not valid semver"
             exit 1
           fi
-
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Release version: $VERSION"
 
-  # Build for Linux
+  lint:
+    name: Lint All Code
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Cache Rust
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-lint-${{ hashFiles('**/Cargo.lock') }}
+
+      # Rust Linting - All Projects
+      - name: Rust Format Check (core)
+        run: cargo fmt --manifest-path core/Cargo.toml -- --check
+
+      - name: Rust Format Check (server)
+        run: cargo fmt --manifest-path server/Cargo.toml -- --check
+
+      - name: Rust Format Check (relay-server)
+        run: cargo fmt --manifest-path relay-server/Cargo.toml -- --check
+
+      - name: Rust Clippy (core)
+        run: cargo clippy --manifest-path core/Cargo.toml -- -D warnings
+
+      - name: Rust Clippy (server)
+        run: cargo clippy --manifest-path server/Cargo.toml -- -D warnings
+
+      - name: Rust Clippy (relay-server)
+        run: cargo clippy --manifest-path relay-server/Cargo.toml -- -D warnings
+
+      # Frontend Linting
+      - name: Install Frontend Dependencies
+        working-directory: frontend
+        run: npm install
+
+      - name: Frontend TypeCheck
+        working-directory: frontend
+        run: npm run typecheck
+
+      - name: Frontend ESLint
+        working-directory: frontend
+        run: npm run lint
+
+      # Client Linting (Tauri)
+      - name: Install Client Dependencies
+        working-directory: client
+        run: npm install -g yarn && yarn install
+
+      - name: Client Rust Format Check
+        run: cargo fmt --manifest-path client/src-tauri/Cargo.toml -- --check
+
+  # ============================================
+  # STAGE 2: Build (only if lint passes)
+  # ============================================
+
   build-linux:
     name: Build Linux
-    needs: validate
+    needs: [validate, lint]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -59,20 +127,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libappindicator3-dev \
-            librsvg2-dev \
-            patchelf \
-            libfuse2 \
-            file
-
-      - name: Install linuxdeploy for AppImage
-        run: |
-          mkdir -p ~/.local/bin
-          curl -L https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage -o ~/.local/bin/linuxdeploy
-          chmod +x ~/.local/bin/linuxdeploy
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libfuse2 file
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -111,10 +166,9 @@ jobs:
             client/src-tauri/target/release/bundle/appimage/*.AppImage
           if-no-files-found: warn
 
-  # Build for Windows
   build-windows:
     name: Build Windows
-    needs: validate
+    needs: [validate, lint]
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -158,10 +212,9 @@ jobs:
             client/src-tauri/target/release/bundle/nsis/*.exe
           if-no-files-found: warn
 
-  # Build for macOS (Apple Silicon)
   build-macos-arm:
     name: Build macOS (Apple Silicon)
-    needs: validate
+    needs: [validate, lint]
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
@@ -206,73 +259,9 @@ jobs:
             client/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
           if-no-files-found: warn
 
-  # Create GitHub Release
-  create-release:
-    name: Create Release
-    needs: [validate, build-linux, build-windows, build-macos-arm]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: Display artifacts
-        run: |
-          echo "=== Downloaded Artifacts ==="
-          find artifacts -type f -name "*.deb" -o -name "*.rpm" -o -name "*.AppImage" -o -name "*.msi" -o -name "*.exe" -o -name "*.dmg" | sort
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ needs.validate.outputs.version }}
-          name: SecureBeam v${{ needs.validate.outputs.version }}
-          draft: false
-          prerelease: false
-          generate_release_notes: true
-          files: |
-            artifacts/**/*.deb
-            artifacts/**/*.rpm
-            artifacts/**/*.AppImage
-            artifacts/**/*.msi
-            artifacts/**/*.exe
-            artifacts/**/*.dmg
-          body: |
-            ## SecureBeam v${{ needs.validate.outputs.version }}
-
-            Secure P2P file transfer based on the Magic Wormhole protocol.
-
-            ### Downloads
-
-            | Platform | File | Architecture |
-            |----------|------|--------------|
-            | **Windows** | `.msi` / `.exe` | x64 |
-            | **Linux (Debian/Ubuntu)** | `.deb` | x64 |
-            | **Linux (Fedora/RHEL)** | `.rpm` | x64 |
-            | **Linux (Universal)** | `.AppImage` | x64 |
-            | **macOS** | `.dmg` | Apple Silicon (ARM64) |
-
-            ### Security
-
-            All transfers are end-to-end encrypted using:
-            - SPAKE2 for password-authenticated key exchange
-            - NaCl SecretBox (XSalsa20-Poly1305) for authenticated encryption
-            - HKDF-SHA256 for key derivation
-
-            See [SECURITY.md](./SECURITY.md) for details.
-
-            ### Changelog
-
-            See the automatically generated release notes below.
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  # Build and push Docker images
-  docker:
+  build-docker:
     name: Build Docker Images
-    needs: validate
+    needs: [validate, lint]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -324,15 +313,65 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # Deploy to Production Server
-  deploy:
-    name: Deploy to Server
-    needs: [validate, docker]
+  # ============================================
+  # STAGE 3: Release & Deploy (only if builds pass)
+  # ============================================
+
+  create-release:
+    name: Create Release
+    needs: [validate, build-linux, build-windows, build-macos-arm]
     runs-on: ubuntu-latest
-    if: success()
     steps:
       - uses: actions/checkout@v4
 
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.validate.outputs.version }}
+          name: SecureBeam v${{ needs.validate.outputs.version }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            artifacts/**/*.deb
+            artifacts/**/*.rpm
+            artifacts/**/*.AppImage
+            artifacts/**/*.msi
+            artifacts/**/*.exe
+            artifacts/**/*.dmg
+          body: |
+            ## SecureBeam v${{ needs.validate.outputs.version }}
+
+            Secure P2P file transfer based on the Magic Wormhole protocol.
+
+            ### Downloads
+
+            | Platform | File | Architecture |
+            |----------|------|--------------|
+            | **Windows** | `.msi` / `.exe` | x64 |
+            | **Linux (Debian/Ubuntu)** | `.deb` | x64 |
+            | **Linux (Fedora/RHEL)** | `.rpm` | x64 |
+            | **Linux (Universal)** | `.AppImage` | x64 |
+            | **macOS** | `.dmg` | Apple Silicon (ARM64) |
+
+            ### Security
+
+            - SPAKE2 for password-authenticated key exchange
+            - NaCl SecretBox (XSalsa20-Poly1305) encryption
+            - HKDF-SHA256 for key derivation
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  deploy:
+    name: Deploy to Server
+    needs: [validate, build-docker]
+    runs-on: ubuntu-latest
+    steps:
       - name: Deploy to Production
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -340,22 +379,24 @@ jobs:
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           script: |
-            # Create deployment directory
+            set -e
+
+            # Setup
             sudo mkdir -p /opt/securebeam
             cd /opt/securebeam
 
-            # Login to GitHub Container Registry
+            # Login to GHCR
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-            # Pull latest images
+            # Pull images
             docker pull ghcr.io/tecburst/securebeam-frontend:${{ needs.validate.outputs.version }}
             docker pull ghcr.io/tecburst/securebeam-mailbox:${{ needs.validate.outputs.version }}
             docker pull ghcr.io/tecburst/securebeam-relay:${{ needs.validate.outputs.version }}
 
-            # Download docker-compose file
+            # Get docker-compose
             curl -sL https://raw.githubusercontent.com/${{ github.repository }}/master/deploy/docker-compose.yml -o docker-compose.yml
 
-            # Set version and restart
+            # Deploy
             export VERSION=${{ needs.validate.outputs.version }}
             docker compose down --remove-orphans || true
             docker compose up -d
@@ -363,4 +404,4 @@ jobs:
             # Cleanup
             docker image prune -f
 
-            echo "Deployment complete!"
+            echo "Deployed v${{ needs.validate.outputs.version }} successfully!"
