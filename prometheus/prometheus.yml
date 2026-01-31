@@ -1,0 +1,37 @@
+# Prometheus configuration for SecureBeam
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+rule_files: []
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Mailbox Server metrics
+  - job_name: 'mailbox-server'
+    static_configs:
+      - targets: ['mailbox-server:3030']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Relay Server metrics
+  - job_name: 'relay-server'
+    static_configs:
+      - targets: ['relay-server:4001']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Nginx metrics (requires nginx-prometheus-exporter)
+  # - job_name: 'nginx'
+  #   static_configs:
+  #     - targets: ['nginx-exporter:9113']

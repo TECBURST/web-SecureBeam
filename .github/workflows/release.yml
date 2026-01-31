@@ -1,0 +1,290 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 0.1.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Build for Linux
+  build-linux:
+    name: Build Linux
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-action@stable
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libfuse2 \
+            file
+
+      - name: Install linuxdeploy for AppImage
+        run: |
+          mkdir -p ~/.local/bin
+          curl -L https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage -o ~/.local/bin/linuxdeploy
+          chmod +x ~/.local/bin/linuxdeploy
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Yarn
+        run: npm install -g yarn
+
+      - name: Install frontend dependencies
+        working-directory: client
+        run: yarn install
+
+      - name: Build Tauri
+        working-directory: client
+        run: yarn tauri build
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-builds
+          path: |
+            client/src-tauri/target/release/bundle/deb/*.deb
+            client/src-tauri/target/release/bundle/rpm/*.rpm
+            client/src-tauri/target/release/bundle/appimage/*.AppImage
+          if-no-files-found: warn
+
+  # Build for Windows
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-action@stable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Yarn
+        run: npm install -g yarn
+
+      - name: Install frontend dependencies
+        working-directory: client
+        run: yarn install
+
+      - name: Build Tauri
+        working-directory: client
+        run: yarn tauri build
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-builds
+          path: |
+            client/src-tauri/target/release/bundle/msi/*.msi
+            client/src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: warn
+
+  # Build for macOS (Intel)
+  build-macos-intel:
+    name: Build macOS (Intel)
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-action@stable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Yarn
+        run: npm install -g yarn
+
+      - name: Install frontend dependencies
+        working-directory: client
+        run: yarn install
+
+      - name: Build Tauri
+        working-directory: client
+        run: yarn tauri build
+
+      - name: Upload macOS Intel artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-intel-builds
+          path: |
+            client/src-tauri/target/release/bundle/dmg/*.dmg
+            client/src-tauri/target/release/bundle/macos/*.app
+          if-no-files-found: warn
+
+  # Build for macOS (Apple Silicon)
+  build-macos-arm:
+    name: Build macOS (Apple Silicon)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-action@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Yarn
+        run: npm install -g yarn
+
+      - name: Install frontend dependencies
+        working-directory: client
+        run: yarn install
+
+      - name: Build Tauri
+        working-directory: client
+        run: yarn tauri build --target aarch64-apple-darwin
+
+      - name: Upload macOS ARM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-arm-builds
+          path: |
+            client/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+            client/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app
+          if-no-files-found: warn
+
+  # Create GitHub Release
+  create-release:
+    name: Create Release
+    needs: [build-linux, build-windows, build-macos-intel, build-macos-arm]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Display structure
+        run: ls -R artifacts
+
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: SecureBeam v${{ steps.version.outputs.version }}
+          draft: true
+          prerelease: false
+          files: |
+            artifacts/**/*.deb
+            artifacts/**/*.rpm
+            artifacts/**/*.AppImage
+            artifacts/**/*.msi
+            artifacts/**/*.exe
+            artifacts/**/*.dmg
+          body: |
+            ## SecureBeam v${{ steps.version.outputs.version }}
+
+            Secure P2P file transfer based on the Magic Wormhole protocol.
+
+            ### Downloads
+
+            | Platform | Download |
+            |----------|----------|
+            | Windows | `.msi` or `.exe` |
+            | Linux (Debian/Ubuntu) | `.deb` |
+            | Linux (Fedora/RHEL) | `.rpm` |
+            | Linux (Universal) | `.AppImage` |
+            | macOS (Intel) | `.dmg` |
+            | macOS (Apple Silicon) | `.dmg` |
+
+            ### Security
+
+            All transfers are end-to-end encrypted using:
+            - SPAKE2 for key exchange
+            - NaCl SecretBox (XSalsa20-Poly1305) for encryption
+            - HKDF-SHA256 for key derivation
+
+            See [SECURITY.md](https://github.com/your-org/SecureBeam/blob/master/SECURITY.md) for details.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Build and push Docker images
+  docker:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build and push Mailbox Server
+        uses: docker/build-push-action@v5
+        with:
+          context: ./server
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/mailbox-server:${{ steps.version.outputs.version }}
+            ghcr.io/${{ github.repository }}/mailbox-server:latest
+
+      - name: Build and push Relay Server
+        uses: docker/build-push-action@v5
+        with:
+          context: ./relay-server
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/relay-server:${{ steps.version.outputs.version }}
+            ghcr.io/${{ github.repository }}/relay-server:latest
