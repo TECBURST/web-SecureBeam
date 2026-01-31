@@ -11,6 +11,7 @@ use tokio::sync::RwLock;
 
 /// Error type for relay operations
 #[derive(Debug, thiserror::Error)]
+#[allow(dead_code)]
 pub enum RelayError {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),

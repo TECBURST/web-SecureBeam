@@ -3,8 +3,10 @@
 //! Mailboxes store messages between peers. Each message has a phase
 //! (a string identifier) and a body (binary data as hex).
 
+#![allow(dead_code)]
+
 use chrono::{DateTime, Utc};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use uuid::Uuid;
 
 /// A message stored in a mailbox

@@ -3,6 +3,8 @@
 //! This implements the server protocol as specified in:
 //! https://github.com/magic-wormhole/magic-wormhole-protocols/blob/main/server-protocol.md
 
+#![allow(dead_code)]
+
 use serde::{Deserialize, Serialize};
 
 /// All messages from client to server
@@ -111,7 +113,7 @@ impl ServerMessage {
     pub fn error(msg: &str, orig: Option<&ClientMessage>) -> Self {
         ServerMessage::Error {
             error: msg.to_string(),
-            orig: orig.map(|m| serde_json::to_value(m).ok()).flatten(),
+            orig: orig.and_then(|m| serde_json::to_value(m).ok()),
         }
     }
 

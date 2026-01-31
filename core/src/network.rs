@@ -2,7 +2,6 @@
 
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
-use tokio::sync::mpsc;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 
 use crate::{Error, Result};
@@ -58,13 +57,9 @@ impl SignalingClient {
 
         let (write, read) = ws_stream.split();
 
-        let (tx, rx) = mpsc::unbounded_channel();
-
         Ok(SessionConnection {
             write: Box::new(write),
             read: Box::new(read),
-            sender: tx,
-            receiver: rx,
         })
     }
 }
@@ -87,15 +82,13 @@ pub struct SessionConnection {
             > + Unpin
             + Send,
     >,
-    sender: mpsc::UnboundedSender<String>,
-    receiver: mpsc::UnboundedReceiver<String>,
 }
 
 impl SessionConnection {
     /// Send a message to the session
     pub async fn send(&mut self, message: &str) -> Result<()> {
         self.write
-            .send(Message::Text(message.to_string().into()))
+            .send(Message::Text(message.to_string()))
             .await
             .map_err(|e| Error::Connection(e.to_string()))?;
         Ok(())

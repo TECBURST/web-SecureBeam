@@ -65,7 +65,7 @@ pub async fn connect_via_relay(
     hasher.update(transit_key);
     hasher.update(b"transit-relay-channel");
     let hash = hasher.finalize();
-    let channel_id = hex::encode(&hash);
+    let channel_id = hex::encode(hash);
 
     // Determine side string
     let side = match role {

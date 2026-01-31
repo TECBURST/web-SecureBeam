@@ -2,6 +2,8 @@
 //!
 //! Manages nameplates, mailboxes, and client connections.
 
+#![allow(dead_code)]
+
 use std::collections::HashMap;
 use tokio::sync::{mpsc, RwLock};
 use uuid::Uuid;
@@ -313,10 +315,10 @@ impl AppState {
         let clients = self.clients.read().await;
 
         for conn in clients.values() {
-            if conn.mailbox_id.as_deref() == Some(mailbox_id) {
-                if conn.side.as_deref() != Some(sender_side) {
-                    let _ = conn.sender.send(message.to_string());
-                }
+            if conn.mailbox_id.as_deref() == Some(mailbox_id)
+                && conn.side.as_deref() != Some(sender_side)
+            {
+                let _ = conn.sender.send(message.to_string());
             }
         }
     }

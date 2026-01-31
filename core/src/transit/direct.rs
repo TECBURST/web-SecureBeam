@@ -67,6 +67,7 @@ async fn try_single_connection(
 }
 
 /// Listen for incoming direct connections
+#[allow(dead_code)]
 pub async fn listen_for_direct(
     port: u16,
     role: TransitRole,

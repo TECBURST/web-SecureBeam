@@ -3,6 +3,8 @@
 //! Nameplates are short numeric identifiers that point to mailboxes.
 //! They are the visible part of wormhole codes (e.g., the "4" in "4-purple-sausages").
 
+#![allow(dead_code)]
+
 use chrono::{DateTime, Utc};
 use std::collections::HashSet;
 

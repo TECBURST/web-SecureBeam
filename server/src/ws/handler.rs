@@ -38,7 +38,7 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
     // Send welcome message
     let welcome = ServerMessage::welcome();
     if sender
-        .send(Message::Text(welcome.to_json().into()))
+        .send(Message::Text(welcome.to_json()))
         .await
         .is_err()
     {
@@ -50,7 +50,7 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
     // Spawn task to forward outgoing messages
     let send_task = tokio::spawn(async move {
         while let Some(msg) = rx.recv().await {
-            if sender.send(Message::Text(msg.into())).await.is_err() {
+            if sender.send(Message::Text(msg)).await.is_err() {
                 break;
             }
         }

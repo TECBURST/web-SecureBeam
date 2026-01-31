@@ -114,6 +114,7 @@ impl RelayHint {
 }
 
 /// Gather local hints for direct connection
+#[allow(dead_code)]
 pub async fn gather_local_hints(listen_port: u16) -> TransitHints {
     let mut hints = TransitHints::new();
 
@@ -131,6 +132,7 @@ pub async fn gather_local_hints(listen_port: u16) -> TransitHints {
 }
 
 /// Get local IP addresses
+#[allow(dead_code)]
 fn local_ip_addresses() -> std::io::Result<Vec<IpAddr>> {
     use std::net::UdpSocket;
 
