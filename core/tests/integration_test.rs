@@ -5,10 +5,9 @@
 
 use securebeam_core::{
     crypto::{derive_key, derive_verifier, Purpose, SecretBox, Side, Spake2Exchange},
-    protocol::{FileAnswer, FileOffer},
+    protocol::{FileAnswer, FileOffer, OfferType},
     transfer::FileTransfer,
 };
-use std::path::PathBuf;
 use tempfile::TempDir;
 
 /// Test complete SPAKE2 key exchange between two parties
@@ -128,31 +127,8 @@ async fn test_file_offer_answer_flow() {
     assert!(answer.is_accepted());
 
     // Create rejection answer
-    let rejection = FileAnswer::reject();
+    let rejection = FileAnswer::reject("User cancelled".to_string());
     assert!(!rejection.is_accepted());
-}
-
-/// Test compression for text files
-#[test]
-fn test_text_file_compression() {
-    let transfer = FileTransfer::new();
-
-    // Original data (repeated text compresses well)
-    let original = b"SecureBeam secure file transfer! ".repeat(1000);
-
-    // Compress
-    let compressed = transfer.compress_data(&original).expect("Should compress");
-
-    // Compressed should be smaller
-    assert!(compressed.len() < original.len());
-
-    // Decompress
-    let decompressed = transfer
-        .decompress_data(&compressed)
-        .expect("Should decompress");
-
-    // Should match original
-    assert_eq!(decompressed, original.to_vec());
 }
 
 /// Test hash computation
@@ -215,8 +191,9 @@ async fn test_directory_offer() {
         .expect("Should prepare directory offer");
 
     assert_eq!(offer.name(), "test_folder");
-    assert!(offer.is_directory());
     assert!(offer.transfer_size() > 0);
+    // Verify it's a directory offer by checking the offer type
+    assert!(matches!(offer.offer_type, OfferType::Directory(_)));
 }
 
 /// Test that secrets are properly handled
@@ -262,33 +239,4 @@ fn test_transit_key_derivation() {
         derive_key(&shared_key, &Purpose::Verifier, 32).expect("Should derive verifier key");
 
     assert_ne!(transit_key, verifier_key);
-}
-
-/// Placeholder for FileTransfer methods we expose
-impl FileTransfer {
-    pub fn compress_data(&self, data: &[u8]) -> securebeam_core::Result<Vec<u8>> {
-        use flate2::write::GzEncoder;
-        use flate2::Compression;
-        use std::io::Write;
-
-        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
-        encoder
-            .write_all(data)
-            .map_err(|e| securebeam_core::Error::Transfer(format!("Compression error: {}", e)))?;
-        encoder.finish().map_err(|e| {
-            securebeam_core::Error::Transfer(format!("Compression finish error: {}", e))
-        })
-    }
-
-    pub fn decompress_data(&self, data: &[u8]) -> securebeam_core::Result<Vec<u8>> {
-        use flate2::read::GzDecoder;
-        use std::io::Read;
-
-        let mut decoder = GzDecoder::new(data);
-        let mut decompressed = Vec::new();
-        decoder
-            .read_to_end(&mut decompressed)
-            .map_err(|e| securebeam_core::Error::Transfer(format!("Decompression error: {}", e)))?;
-        Ok(decompressed)
-    }
 }
