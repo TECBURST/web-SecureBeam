@@ -311,24 +311,24 @@ SecureBeam/
 
 ## Entwicklungsplan (Überarbeitet)
 
-### Phase 1: Protokoll-Fundament ✓ (Teilweise)
+### Phase 1: Protokoll-Fundament ✓
 - [x] Projekt-Dokumentation (agents.md)
 - [x] Grundstruktur Server
 - [x] Docker Compose Setup
-- [ ] **Magic Wormhole Protokoll studiert** ← Aktuell
+- [x] Magic Wormhole Protokoll studiert
 
-### Phase 2: Kryptographie (Nächste)
-- [ ] SPAKE2 Integration (`spake2` Crate)
-- [ ] NaCl SecretBox (`sodiumoxide` oder `crypto_secretbox`)
-- [ ] HKDF Implementation
-- [ ] Unit Tests für Crypto
+### Phase 2: Kryptographie ✓
+- [x] SPAKE2 Integration (`spake2` Crate)
+- [x] NaCl SecretBox (`xsalsa20poly1305` Crate)
+- [x] HKDF Implementation (`hkdf` Crate)
+- [x] Unit Tests für Crypto (12 Tests)
 
-### Phase 3: Mailbox Server (Protokoll-konform)
-- [ ] Nameplate Allocation
-- [ ] Mailbox mit Phasen
-- [ ] Side-Tracking
-- [ ] Vollständiger Message-Flow
-- [ ] Integration Tests
+### Phase 3: Mailbox Server ✓
+- [x] Nameplate Allocation
+- [x] Mailbox mit Phasen
+- [x] Side-Tracking
+- [x] Vollständiger Message-Flow (bind, allocate, claim, open, add, close)
+- [x] Unit Tests (10 Tests)
 
 ### Phase 4: Transit
 - [ ] Direct Connection (STUN, Hole-Punching)
@@ -382,26 +382,26 @@ SecureBeam/
 
 ## Aktuelle Arbeit
 
-**Status:** Phase 1 → Phase 2 Übergang
+**Status:** Phase 3 abgeschlossen → Phase 4 (Transit)
 
-**Erkenntnisse:**
-- Bisherige Implementierung war zu vereinfacht
-- Müssen streng dem Magic Wormhole Protokoll folgen
-- Kryptographie über bewährte Crates, nicht selbst bauen
+**Erledigte Meilensteine:**
+- ✅ Crypto Module mit SPAKE2, NaCl SecretBox, HKDF
+- ✅ Mailbox Server mit vollständigem Protokoll
+- ✅ 22 Unit Tests bestanden
 
 **Nächste Schritte:**
-1. Server zu "Mailbox Server" umbauen (Nameplate, Phasen, Sides)
-2. Crypto-Module mit echtem SPAKE2 + NaCl SecretBox
-3. Transit Relay Server hinzufügen
+1. Transit Relay Server implementieren
+2. Direct P2P Connection (STUN, Hole-Punching)
+3. File Transfer Protokoll
 
 ---
 
 ## Commit-Historie
 
-Commits werden regelmäßig erstellt um den Fortschritt zu dokumentieren.
-
 | Commit | Beschreibung |
 |--------|--------------|
 | `014b7d5` | Initial infrastructure (simplified) |
 | `b1c1055` | Clean up compiler warnings |
-| *next* | Update agents.md with protocol details |
+| `7570b10` | Update agents.md with protocol details |
+| `17ab5c5` | Implement Magic Wormhole compatible crypto module |
+| `67ceac0` | Implement Magic Wormhole compatible Mailbox Server |
