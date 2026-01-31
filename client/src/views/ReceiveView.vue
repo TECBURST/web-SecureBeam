@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { invoke } from '@tauri-apps/api/core'
-import { ArrowLeft, Download, Loader2, Check, X, File } from 'lucide-vue-next'
+import { ArrowLeft, Loader2, Check, X, File } from 'lucide-vue-next'
 
 const router = useRouter()
 
@@ -36,7 +36,7 @@ async function connect() {
     errorMessage.value = null
 
     // Parse and validate code
-    const result = await invoke<[string, string]>('parse_code', {
+    await invoke<[string, string]>('parse_code', {
       code: codeInput.value.trim().toLowerCase(),
     })
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { invoke } from '@tauri-apps/api/core'
 import { ArrowLeft, Upload, File, Folder, Copy, Check, Loader2 } from 'lucide-vue-next'
