@@ -19,7 +19,7 @@ pub use relay::connect_via_relay;
 use crate::{Error, Result};
 
 /// Default relay server URL
-pub const DEFAULT_RELAY: &str = "tcp://relay.securebeam.io:4001";
+pub const DEFAULT_RELAY: &str = "tcp://relay.securebeam.eu:4001";
 
 /// Transit handshake timeout in seconds
 pub const HANDSHAKE_TIMEOUT_SECS: u64 = 30;

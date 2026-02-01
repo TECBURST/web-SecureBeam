@@ -29,4 +29,4 @@ pub fn sha256_hex(data: &[u8]) -> String {
 }
 
 /// The application ID for SecureBeam (used in key derivation)
-pub const APP_ID: &[u8] = b"securebeam.io/file-transfer";
+pub const APP_ID: &[u8] = b"securebeam.eu/file-transfer";

@@ -43,6 +43,12 @@ pub use transit::{establish_transit, TransitConnection, TransitHints, TransitRol
 /// Library version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+/// Default mailbox server URL (for session/signaling)
+pub const DEFAULT_MAILBOX: &str = "https://mailbox.securebeam.eu";
+
+/// Default relay server URL (re-exported from transit)
+pub use transit::DEFAULT_RELAY;
+
 /// Result type for SecureBeam operations
 pub type Result<T> = std::result::Result<T, Error>;
 
