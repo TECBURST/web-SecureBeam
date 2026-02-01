@@ -1,18 +1,20 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Shield, Monitor, Download, Loader2 } from 'lucide-vue-next'
+import { Shield, Monitor, Download, Loader2, ExternalLink } from 'lucide-vue-next'
 
 const { t } = useI18n()
 
 // Dynamic download links from GitHub API
 const isLoading = ref(true)
 const version = ref('')
+const error = ref(false)
 
 interface DownloadAsset {
   name: string
   url: string
   size: string
+  filename: string
 }
 
 const downloads = ref({
@@ -35,22 +37,38 @@ function formatSize(bytes: number): string {
 
 // Get friendly name for file
 function getFriendlyName(filename: string): string {
-  if (filename.endsWith('.exe') || filename.endsWith('.msi')) {
-    if (filename.includes('setup') || filename.includes('Setup')) {
-      return 'Installer (.exe)'
-    }
-    return filename.endsWith('.msi') ? 'Installer (.msi)' : 'Portable (.exe)'
-  } else if (filename.endsWith('.dmg')) {
+  const lower = filename.toLowerCase()
+
+  // Windows
+  if (lower.includes('setup') && lower.endsWith('.exe')) {
+    return 'Installer (.exe)'
+  }
+  if (lower.endsWith('.msi')) {
+    return 'Installer (.msi)'
+  }
+  if (lower.endsWith('.exe')) {
+    return 'Portable (.exe)'
+  }
+
+  // macOS
+  if (lower.endsWith('.dmg')) {
     return 'Disk Image (.dmg)'
-  } else if (filename.endsWith('.app.tar.gz')) {
-    return 'App Bundle (.app.tar.gz)'
-  } else if (filename.endsWith('.AppImage')) {
-    return 'AppImage (Universal)'
-  } else if (filename.endsWith('.deb')) {
+  }
+  if (lower.includes('.app.tar.gz')) {
+    return 'App Bundle (.tar.gz)'
+  }
+
+  // Linux
+  if (lower.endsWith('.appimage')) {
+    return 'AppImage'
+  }
+  if (lower.endsWith('.deb')) {
     return 'Debian/Ubuntu (.deb)'
-  } else if (filename.endsWith('.rpm')) {
+  }
+  if (lower.endsWith('.rpm')) {
     return 'Fedora/RHEL (.rpm)'
   }
+
   return filename
 }
 
@@ -63,34 +81,50 @@ async function fetchLatestRelease() {
     const release = await response.json()
     version.value = release.tag_name.replace('v', '')
 
+    // Clear previous downloads
+    downloads.value.windows = []
+    downloads.value.macos = []
+    downloads.value.linux = []
+
     // Categorize assets by OS
     for (const asset of release.assets) {
-      const name = asset.name
-      const lowerName = name.toLowerCase()
+      const filename = asset.name
+      const lower = filename.toLowerCase()
       const url = asset.browser_download_url
       const size = formatSize(asset.size)
 
       const downloadAsset: DownloadAsset = {
-        name: getFriendlyName(name),
+        name: getFriendlyName(filename),
         url,
-        size
+        size,
+        filename
       }
 
-      if (lowerName.endsWith('.exe') || lowerName.endsWith('.msi')) {
+      // Windows: .exe, .msi
+      if (lower.endsWith('.exe') || lower.endsWith('.msi')) {
         downloads.value.windows.push(downloadAsset)
-      } else if (lowerName.endsWith('.dmg') || lowerName.includes('.app.tar.gz')) {
+      }
+      // macOS: .dmg, .app.tar.gz
+      else if (lower.endsWith('.dmg') || lower.includes('.app.tar.gz')) {
         downloads.value.macos.push(downloadAsset)
-      } else if (lowerName.endsWith('.appimage') || lowerName.endsWith('.deb') || lowerName.endsWith('.rpm')) {
+      }
+      // Linux: .AppImage, .deb, .rpm
+      else if (lower.endsWith('.appimage') || lower.endsWith('.deb') || lower.endsWith('.rpm')) {
         downloads.value.linux.push(downloadAsset)
       }
     }
-  } catch (error) {
-    console.error('Failed to fetch latest release:', error)
-    version.value = 'latest'
+
+    error.value = false
+  } catch (err) {
+    console.error('Failed to fetch latest release:', err)
+    error.value = true
+    version.value = ''
   } finally {
     isLoading.value = false
   }
 }
+
+const githubReleasesUrl = 'https://github.com/TECBURST/web-SecureBeam/releases/latest'
 
 onMounted(() => {
   fetchLatestRelease()
@@ -102,8 +136,8 @@ onMounted(() => {
     <!-- Hero Section with CTA -->
     <div class="text-center mb-12 sm:mb-16">
       <!-- Badge -->
-      <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-sm font-medium mb-6">
-        <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+      <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-neutral-200 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 text-sm font-medium mb-6">
+        <span class="w-2 h-2 rounded-full bg-neutral-900 dark:bg-white animate-pulse"></span>
         {{ t('download.available') }}
       </div>
 
@@ -122,10 +156,24 @@ onMounted(() => {
         <Loader2 class="w-8 h-8 animate-spin text-neutral-400" />
       </div>
 
+      <!-- Error State - Link to GitHub -->
+      <div v-else-if="error" class="py-12">
+        <p class="text-neutral-500 mb-4">Downloads konnten nicht geladen werden.</p>
+        <a
+          :href="githubReleasesUrl"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="inline-flex items-center gap-2 bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 hover:bg-neutral-700 dark:hover:bg-neutral-200 rounded-lg px-6 py-3 font-medium transition-colors"
+        >
+          <ExternalLink class="w-5 h-5" />
+          Downloads auf GitHub
+        </a>
+      </div>
+
       <!-- Download Cards -->
       <div v-else class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <!-- Windows Card -->
-        <div class="bg-neutral-100 dark:bg-neutral-800 rounded-2xl p-6 border border-neutral-200 dark:border-neutral-700">
+        <div class="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-neutral-200 dark:border-neutral-800">
           <!-- Windows Icon -->
           <div class="mb-4 flex justify-center">
             <svg class="w-14 h-14 text-neutral-900 dark:text-white" viewBox="0 0 24 24" fill="currentColor">
@@ -141,9 +189,8 @@ onMounted(() => {
               v-for="asset in downloads.windows"
               :key="asset.url"
               :href="asset.url"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="flex items-center justify-between gap-2 bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 hover:bg-neutral-700 dark:hover:bg-neutral-200 rounded-lg px-4 py-3 text-sm font-medium transition-colors cursor-pointer"
+              download
+              class="flex items-center justify-between gap-2 bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 hover:bg-neutral-700 dark:hover:bg-neutral-200 rounded-lg px-4 py-3 text-sm font-medium transition-colors"
             >
               <span class="flex items-center gap-2">
                 <Download class="w-4 h-4" />
@@ -151,14 +198,21 @@ onMounted(() => {
               </span>
               <span class="text-neutral-400 dark:text-neutral-500 text-xs">{{ asset.size }}</span>
             </a>
-            <p v-if="downloads.windows.length === 0" class="text-neutral-500 text-sm py-2">
-              Keine Downloads verfügbar
-            </p>
+            <a
+              v-if="downloads.windows.length === 0"
+              :href="githubReleasesUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="flex items-center justify-center gap-2 border border-neutral-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg px-4 py-3 text-sm transition-colors"
+            >
+              <ExternalLink class="w-4 h-4" />
+              Auf GitHub ansehen
+            </a>
           </div>
         </div>
 
         <!-- macOS Card -->
-        <div class="bg-neutral-100 dark:bg-neutral-800 rounded-2xl p-6 border border-neutral-200 dark:border-neutral-700">
+        <div class="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-neutral-200 dark:border-neutral-800">
           <!-- Apple Icon -->
           <div class="mb-4 flex justify-center">
             <svg class="w-14 h-14 text-neutral-900 dark:text-white" viewBox="0 0 24 24" fill="currentColor">
@@ -174,9 +228,8 @@ onMounted(() => {
               v-for="asset in downloads.macos"
               :key="asset.url"
               :href="asset.url"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="flex items-center justify-between gap-2 bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 hover:bg-neutral-700 dark:hover:bg-neutral-200 rounded-lg px-4 py-3 text-sm font-medium transition-colors cursor-pointer"
+              download
+              class="flex items-center justify-between gap-2 bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 hover:bg-neutral-700 dark:hover:bg-neutral-200 rounded-lg px-4 py-3 text-sm font-medium transition-colors"
             >
               <span class="flex items-center gap-2">
                 <Download class="w-4 h-4" />
@@ -184,14 +237,21 @@ onMounted(() => {
               </span>
               <span class="text-neutral-400 dark:text-neutral-500 text-xs">{{ asset.size }}</span>
             </a>
-            <p v-if="downloads.macos.length === 0" class="text-neutral-500 text-sm py-2">
-              Keine Downloads verfügbar
-            </p>
+            <a
+              v-if="downloads.macos.length === 0"
+              :href="githubReleasesUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="flex items-center justify-center gap-2 border border-neutral-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg px-4 py-3 text-sm transition-colors"
+            >
+              <ExternalLink class="w-4 h-4" />
+              Auf GitHub ansehen
+            </a>
           </div>
         </div>
 
         <!-- Linux Card -->
-        <div class="bg-neutral-100 dark:bg-neutral-800 rounded-2xl p-6 border border-neutral-200 dark:border-neutral-700">
+        <div class="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-neutral-200 dark:border-neutral-800">
           <!-- Tux Icon -->
           <div class="mb-4 flex justify-center">
             <svg class="w-14 h-14 text-neutral-900 dark:text-white" viewBox="0 0 24 24" fill="currentColor">
@@ -207,9 +267,8 @@ onMounted(() => {
               v-for="asset in downloads.linux"
               :key="asset.url"
               :href="asset.url"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="flex items-center justify-between gap-2 bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 hover:bg-neutral-700 dark:hover:bg-neutral-200 rounded-lg px-4 py-3 text-sm font-medium transition-colors cursor-pointer"
+              download
+              class="flex items-center justify-between gap-2 bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 hover:bg-neutral-700 dark:hover:bg-neutral-200 rounded-lg px-4 py-3 text-sm font-medium transition-colors"
             >
               <span class="flex items-center gap-2">
                 <Download class="w-4 h-4" />
@@ -217,15 +276,22 @@ onMounted(() => {
               </span>
               <span class="text-neutral-400 dark:text-neutral-500 text-xs">{{ asset.size }}</span>
             </a>
-            <p v-if="downloads.linux.length === 0" class="text-neutral-500 text-sm py-2">
-              Keine Downloads verfügbar
-            </p>
+            <a
+              v-if="downloads.linux.length === 0"
+              :href="githubReleasesUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="flex items-center justify-center gap-2 border border-neutral-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg px-4 py-3 text-sm transition-colors"
+            >
+              <ExternalLink class="w-4 h-4" />
+              Auf GitHub ansehen
+            </a>
           </div>
         </div>
       </div>
 
       <!-- Version info -->
-      <p v-if="!isLoading" class="text-sm text-neutral-500 dark:text-neutral-500 mb-12">
+      <p v-if="!isLoading && !error && version" class="text-sm text-neutral-500 dark:text-neutral-500 mb-12">
         Version {{ version }}
       </p>
     </div>
@@ -233,9 +299,9 @@ onMounted(() => {
     <!-- Feature Cards -->
     <div class="grid sm:grid-cols-2 gap-4 sm:gap-6 max-w-2xl mx-auto mb-12">
       <!-- Native Apps Card -->
-      <div class="card !p-6 text-left">
+      <div class="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-6 text-left">
         <div class="flex items-start gap-4">
-          <div class="w-10 h-10 rounded-lg bg-neutral-100 dark:bg-neutral-700 flex items-center justify-center flex-shrink-0">
+          <div class="w-10 h-10 rounded-lg bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center flex-shrink-0">
             <Monitor class="w-5 h-5 text-neutral-900 dark:text-white" />
           </div>
           <div>
@@ -250,9 +316,9 @@ onMounted(() => {
       </div>
 
       <!-- Better Protocol Card -->
-      <div class="card !p-6 text-left">
+      <div class="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-6 text-left">
         <div class="flex items-start gap-4">
-          <div class="w-10 h-10 rounded-lg bg-neutral-100 dark:bg-neutral-700 flex items-center justify-center flex-shrink-0">
+          <div class="w-10 h-10 rounded-lg bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center flex-shrink-0">
             <Shield class="w-5 h-5 text-neutral-900 dark:text-white" />
           </div>
           <div>
