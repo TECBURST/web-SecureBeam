@@ -11,8 +11,8 @@ use tokio::sync::Mutex;
 
 use securebeam_core::{
     crypto::{derive_key, Purpose, Side, Spake2Exchange},
-    establish_transit, FileAnswer, FileOffer, FileTransfer, Message, SignalingClient,
-    TransitHints, TransitRole, DEFAULT_MAILBOX, DEFAULT_RELAY,
+    establish_transit, FileAnswer, FileOffer, FileTransfer, Message, SignalingClient, TransitHints,
+    TransitRole, DEFAULT_MAILBOX, DEFAULT_RELAY,
 };
 
 /// Application state
@@ -59,14 +59,27 @@ pub struct FileOfferInfo {
 
 /// Generate word lists for codes
 const ADJECTIVES: &[&str] = &[
-    "purple", "green", "blue", "red", "orange", "yellow", "silver", "golden",
-    "crimson", "azure", "amber", "coral", "ivory", "jade", "lime", "navy",
+    "purple", "green", "blue", "red", "orange", "yellow", "silver", "golden", "crimson", "azure",
+    "amber", "coral", "ivory", "jade", "lime", "navy",
 ];
 
 const NOUNS: &[&str] = &[
-    "sausages", "elephants", "guitars", "planets", "mountains", "rivers",
-    "clouds", "forests", "dragons", "unicorns", "wizards", "knights",
-    "castles", "oceans", "comets", "crystals",
+    "sausages",
+    "elephants",
+    "guitars",
+    "planets",
+    "mountains",
+    "rivers",
+    "clouds",
+    "forests",
+    "dragons",
+    "unicorns",
+    "wizards",
+    "knights",
+    "castles",
+    "oceans",
+    "comets",
+    "crystals",
 ];
 
 /// Generate a new wormhole code for sending
@@ -203,16 +216,17 @@ async fn run_sender(
 
     let peer_json: serde_json::Value =
         serde_json::from_str(&peer_msg_text).map_err(|e| e.to_string())?;
-    let peer_pake_hex = peer_json["pake"]
-        .as_str()
-        .ok_or("Missing pake field")?;
-    let peer_pake_msg =
-        securebeam_core::crypto::Spake2Message::from_hex(peer_pake_hex).map_err(|e| e.to_string())?;
+    let peer_pake_hex = peer_json["pake"].as_str().ok_or("Missing pake field")?;
+    let peer_pake_msg = securebeam_core::crypto::Spake2Message::from_hex(peer_pake_hex)
+        .map_err(|e| e.to_string())?;
 
     // Complete key exchange
     let shared_key = exchange.finish(&peer_pake_msg).map_err(|e| e.to_string())?;
 
-    let _ = app.emit("transfer-status", "Key exchange complete. Establishing connection...");
+    let _ = app.emit(
+        "transfer-status",
+        "Key exchange complete. Establishing connection...",
+    );
 
     // Derive transit key
     let transit_key = derive_key(&shared_key, &Purpose::Transit, 32).map_err(|e| e.to_string())?;
@@ -378,16 +392,17 @@ async fn run_receiver(
 
     let peer_json: serde_json::Value =
         serde_json::from_str(&peer_msg_text).map_err(|e| e.to_string())?;
-    let peer_pake_hex = peer_json["pake"]
-        .as_str()
-        .ok_or("Missing pake field")?;
-    let peer_pake_msg =
-        securebeam_core::crypto::Spake2Message::from_hex(peer_pake_hex).map_err(|e| e.to_string())?;
+    let peer_pake_hex = peer_json["pake"].as_str().ok_or("Missing pake field")?;
+    let peer_pake_msg = securebeam_core::crypto::Spake2Message::from_hex(peer_pake_hex)
+        .map_err(|e| e.to_string())?;
 
     // Complete key exchange
     let shared_key = exchange.finish(&peer_pake_msg).map_err(|e| e.to_string())?;
 
-    let _ = app.emit("transfer-status", "Key exchange complete. Establishing connection...");
+    let _ = app.emit(
+        "transfer-status",
+        "Key exchange complete. Establishing connection...",
+    );
 
     // Derive transit key
     let transit_key = derive_key(&shared_key, &Purpose::Transit, 32).map_err(|e| e.to_string())?;
