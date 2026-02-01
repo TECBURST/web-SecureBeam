@@ -400,10 +400,11 @@ jobs:
             docker pull ghcr.io/tecburst/securebeam-relay:${{ steps.version.outputs.version }}
 
             curl -sL https://raw.githubusercontent.com/${{ github.repository }}/master/deploy/docker-compose.yml -o docker-compose.yml
+            curl -sL https://raw.githubusercontent.com/${{ github.repository }}/master/deploy/Caddyfile -o Caddyfile
 
             export VERSION=${{ steps.version.outputs.version }}
             docker compose down --remove-orphans || true
             docker compose up -d
             docker image prune -f
 
-            echo "Deployed v${{ steps.version.outputs.version }}!"
+            echo "Deployed v${{ steps.version.outputs.version }} with HTTPS!"

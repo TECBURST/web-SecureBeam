@@ -5,16 +5,31 @@ version: '3.8'
 # Server: 159.195.74.237
 
 services:
-  # Frontend (Coming Soon Page)
+  # Caddy - Reverse Proxy with automatic HTTPS
+  caddy:
+    image: caddy:2-alpine
+    container_name: securebeam-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+      - mailbox-server
+    networks:
+      - securebeam
+
+  # Frontend (Download Page)
   frontend:
     image: ghcr.io/tecburst/securebeam-frontend:${VERSION:-latest}
     container_name: securebeam-frontend
     restart: unless-stopped
-    ports:
-      - "80:80"
-    depends_on:
-      - mailbox-server
-      - relay-server
+    expose:
+      - "80"
     networks:
       - securebeam
 
@@ -23,8 +38,8 @@ services:
     image: ghcr.io/tecburst/securebeam-mailbox:${VERSION:-latest}
     container_name: securebeam-mailbox
     restart: unless-stopped
-    ports:
-      - "3030:3030"
+    expose:
+      - "3030"
     environment:
       - RUST_LOG=info
       - SERVER_HOST=0.0.0.0
@@ -39,6 +54,7 @@ services:
       - securebeam
 
   # Transit Relay Server (P2P fallback)
+  # Note: Uses raw TCP, not HTTP - needs direct port access
   relay-server:
     image: ghcr.io/tecburst/securebeam-relay:${VERSION:-latest}
     container_name: securebeam-relay
@@ -57,6 +73,10 @@ services:
       start_period: 10s
     networks:
       - securebeam
+
+volumes:
+  caddy_data:
+  caddy_config:
 
 networks:
   securebeam:
