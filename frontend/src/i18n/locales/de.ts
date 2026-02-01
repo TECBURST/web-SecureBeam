@@ -3,12 +3,25 @@ export default {
     home: 'Start',
     security: 'Sicherheit'
   },
+  download: {
+    available: 'Jetzt verfügbar',
+    headline: 'Du bist nur einen Klick entfernt',
+    subline: 'Lade SecureBeam herunter und teile Dateien sicher – Ende-zu-Ende verschlüsselt, direkt von Gerät zu Gerät, ohne Cloud.',
+    forWindows: 'Download für Windows',
+    forMac: 'Download für macOS',
+    forLinux: 'Download für Linux',
+    otherPlatforms: 'Andere Plattformen',
+    freeForever: 'Für immer kostenlos',
+    encrypted: 'Ende-zu-Ende verschlüsselt',
+    noCloud: 'Keine Cloud',
+    openSource: 'Open Source'
+  },
   comingSoon: {
     title: 'Wir bauen SecureBeam neu',
     subtitle: 'Wir überdenken Dateitransfer von Grund auf. Browser-basiertes WebRTC hatte zu viele Einschränkungen, daher entwickeln wir native Apps für ein besseres Erlebnis.',
     nativeApps: {
       title: 'Native Anwendungen',
-      description: 'Beginnend mit Windows entwickeln wir dedizierte Apps, die schnellere und zuverlässigere Transfers ermöglichen.'
+      description: 'Schnellere und zuverlässigere Transfers mit unseren dedizierten Desktop-Apps für Windows, macOS und Linux.'
     },
     betterProtocol: {
       title: 'Besseres Protokoll',
