@@ -19,6 +19,11 @@ const router = createRouter({
       name: 'receive',
       component: () => import('@/views/ReceiveView.vue'),
     },
+    {
+      path: '/settings',
+      name: 'settings',
+      component: () => import('@/views/SettingsView.vue'),
+    },
   ],
 })
 

@@ -551,6 +551,106 @@ fn get_version() -> String {
     securebeam_core::VERSION.to_string()
 }
 
+/// Get the saved download path
+#[tauri::command]
+fn get_download_path() -> Option<String> {
+    // Try to read from a config file or use platform defaults
+    if let Some(config_dir) = dirs::config_dir() {
+        let config_file = config_dir.join("securebeam").join("config.json");
+        if config_file.exists() {
+            if let Ok(content) = std::fs::read_to_string(&config_file) {
+                if let Ok(config) = serde_json::from_str::<serde_json::Value>(&content) {
+                    if let Some(path) = config["download_path"].as_str() {
+                        return Some(path.to_string());
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Get the default download path
+#[tauri::command]
+fn get_default_download_path() -> String {
+    dirs::download_dir()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|| {
+            dirs::home_dir()
+                .map(|p| p.join("Downloads").to_string_lossy().to_string())
+                .unwrap_or_else(|| "~/Downloads".to_string())
+        })
+}
+
+/// Set the download path
+#[tauri::command]
+fn set_download_path(path: String) -> Result<(), String> {
+    let config_dir = dirs::config_dir()
+        .ok_or("Could not find config directory")?
+        .join("securebeam");
+
+    std::fs::create_dir_all(&config_dir).map_err(|e| e.to_string())?;
+
+    let config_file = config_dir.join("config.json");
+
+    // Read existing config or create new
+    let mut config: serde_json::Value = if config_file.exists() {
+        let content = std::fs::read_to_string(&config_file).map_err(|e| e.to_string())?;
+        serde_json::from_str(&content).unwrap_or(serde_json::json!({}))
+    } else {
+        serde_json::json!({})
+    };
+
+    config["download_path"] = serde_json::Value::String(path);
+
+    std::fs::write(
+        &config_file,
+        serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+/// Test connection to the signaling server
+#[tauri::command]
+async fn test_signaling_connection() -> bool {
+    use tokio::time::{timeout, Duration};
+
+    let result = timeout(Duration::from_secs(5), async {
+        // Try to establish a WebSocket connection to the signaling server
+        let url = format!("{}/ws/test-ping", DEFAULT_MAILBOX);
+        match tokio_tungstenite::connect_async(&url).await {
+            Ok(_) => {
+                // Successfully connected - connection will be dropped automatically
+                true
+            }
+            Err(_) => false,
+        }
+    })
+    .await;
+
+    result.unwrap_or(false)
+}
+
+/// Test connection to the relay server
+#[tauri::command]
+async fn test_relay_connection() -> bool {
+    use tokio::time::{timeout, Duration};
+
+    let result = timeout(Duration::from_secs(5), async {
+        // Try TCP connection to relay server
+        let relay_url = DEFAULT_RELAY.trim_start_matches("tcp://");
+        match tokio::net::TcpStream::connect(relay_url).await {
+            Ok(_) => true,
+            Err(_) => false,
+        }
+    })
+    .await;
+
+    result.unwrap_or(false)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -566,6 +666,11 @@ pub fn run() {
             start_receive,
             format_size,
             get_version,
+            get_download_path,
+            get_default_download_path,
+            set_download_path,
+            test_signaling_connection,
+            test_relay_connection,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

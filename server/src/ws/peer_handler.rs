@@ -13,12 +13,15 @@ use futures::{sink::SinkExt, stream::StreamExt};
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::{mpsc, RwLock};
 
+/// Type alias for peer sender channel
+type PeerSender = mpsc::UnboundedSender<String>;
+
 /// Shared state for peer connections
 pub struct PeerState {
     /// Active peers waiting for a partner, keyed by code
-    waiting: RwLock<HashMap<String, mpsc::UnboundedSender<String>>>,
+    waiting: RwLock<HashMap<String, PeerSender>>,
     /// Connected peer pairs, keyed by code
-    pairs: RwLock<HashMap<String, (mpsc::UnboundedSender<String>, mpsc::UnboundedSender<String>)>>,
+    pairs: RwLock<HashMap<String, (PeerSender, PeerSender)>>,
 }
 
 impl PeerState {
