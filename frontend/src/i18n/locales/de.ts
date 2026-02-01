@@ -87,7 +87,7 @@ export default {
     doNotClose: 'Dieses Fenster nicht schließen',
     transferWillFail: 'Die Übertragung wird abgebrochen, wenn Sie diese Seite schließen oder aktualisieren.'
   },
-  download: {
+  downloadDialog: {
     title: 'Mehrere Dateien eingehend',
     message: 'Du erhältst gleich {count} Dateien. Downloads erlauben?',
     info: 'Jede Datei wird in deinem Standard-Download-Ordner gespeichert.',

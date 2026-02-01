@@ -74,7 +74,7 @@ export default {
     doNotClose: '请勿关闭此窗口',
     transferWillFail: '如果您关闭或刷新此页面，传输将被取消。'
   },
-  download: {
+  downloadDialog: {
     title: '多个文件传入',
     message: '您将收到 {count} 个文件。允许下载吗？',
     info: '每个文件将下载到您的默认下载文件夹。',

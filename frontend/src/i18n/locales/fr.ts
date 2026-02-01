@@ -74,7 +74,7 @@ export default {
     doNotClose: 'Ne fermez pas cette fenêtre',
     transferWillFail: 'Le transfert sera annulé si vous fermez ou actualisez cette page.'
   },
-  download: {
+  downloadDialog: {
     title: 'Fichiers multiples entrants',
     message: 'Vous allez recevoir {count} fichiers. Autoriser les téléchargements ?',
     info: 'Chaque fichier sera téléchargé dans votre dossier de téléchargements.',

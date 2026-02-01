@@ -74,7 +74,7 @@ export default {
     doNotClose: 'Nie zamykaj tego okna',
     transferWillFail: 'Transfer zostanie anulowany, jeśli zamkniesz lub odświeżysz tę stronę.'
   },
-  download: {
+  downloadDialog: {
     title: 'Wiele plików przychodzących',
     message: 'Otrzymasz {count} plików. Zezwolić na pobieranie?',
     info: 'Każdy plik zostanie pobrany do folderu pobierania.',

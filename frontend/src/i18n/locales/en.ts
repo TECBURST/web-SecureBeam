@@ -87,7 +87,7 @@ export default {
     doNotClose: 'Do not close this window',
     transferWillFail: 'The transfer will be cancelled if you close or refresh this page.'
   },
-  download: {
+  downloadDialog: {
     title: 'Multiple Files Incoming',
     message: 'You are about to receive {count} files. Allow downloads to continue?',
     info: 'Each file will be downloaded to your default downloads folder.',

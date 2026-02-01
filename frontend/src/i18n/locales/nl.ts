@@ -74,7 +74,7 @@ export default {
     doNotClose: 'Sluit dit venster niet',
     transferWillFail: 'De overdracht wordt geannuleerd als u deze pagina sluit of vernieuwt.'
   },
-  download: {
+  downloadDialog: {
     title: 'Meerdere bestanden inkomend',
     message: 'U ontvangt {count} bestanden. Downloads toestaan?',
     info: 'Elk bestand wordt gedownload naar uw standaard downloadmap.',
