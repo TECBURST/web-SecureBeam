@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Monitor, Shield, Apple, Terminal } from 'lucide-vue-next'
+import { Monitor, Shield, Apple, Terminal, Loader2 } from 'lucide-vue-next'
 
 const { t } = useI18n()
 
@@ -16,18 +16,67 @@ if (typeof navigator !== 'undefined') {
   }
 }
 
-// Download links
-const downloadLinks = {
-  windows: 'https://github.com/TECBURST/web-SecureBeam/releases/latest/download/SecureBeam_1.0.0_x64-setup.exe',
-  macos: 'https://github.com/TECBURST/web-SecureBeam/releases/latest/download/SecureBeam_1.0.0_aarch64.dmg',
+// Dynamic download links from GitHub API
+const isLoading = ref(true)
+const version = ref('')
+const downloadLinks = ref({
+  windows: '',
+  macos: '',
   linux: {
-    appimage: 'https://github.com/TECBURST/web-SecureBeam/releases/latest/download/SecureBeam_1.0.0_amd64.AppImage',
-    deb: 'https://github.com/TECBURST/web-SecureBeam/releases/latest/download/SecureBeam_1.0.0_amd64.deb',
-    rpm: 'https://github.com/TECBURST/web-SecureBeam/releases/latest/download/SecureBeam-1.0.0-1.x86_64.rpm'
+    appimage: '',
+    deb: '',
+    rpm: ''
+  }
+})
+
+const showLinuxOptions = ref(false)
+
+// Fetch latest release from GitHub
+async function fetchLatestRelease() {
+  try {
+    const response = await fetch('https://api.github.com/repos/TECBURST/web-SecureBeam/releases/latest')
+    if (!response.ok) throw new Error('Failed to fetch release')
+
+    const release = await response.json()
+    version.value = release.tag_name.replace('v', '')
+
+    // Find assets by file extension/pattern
+    for (const asset of release.assets) {
+      const name = asset.name.toLowerCase()
+      const url = asset.browser_download_url
+
+      if (name.endsWith('.exe') || name.endsWith('.msi')) {
+        if (name.includes('setup')) {
+          downloadLinks.value.windows = url
+        }
+      } else if (name.endsWith('.dmg')) {
+        downloadLinks.value.macos = url
+      } else if (name.endsWith('.appimage')) {
+        downloadLinks.value.linux.appimage = url
+      } else if (name.endsWith('.deb')) {
+        downloadLinks.value.linux.deb = url
+      } else if (name.endsWith('.rpm')) {
+        downloadLinks.value.linux.rpm = url
+      }
+    }
+  } catch (error) {
+    console.error('Failed to fetch latest release:', error)
+    // Fallback to GitHub releases page
+    const fallback = 'https://github.com/TECBURST/web-SecureBeam/releases/latest'
+    downloadLinks.value.windows = fallback
+    downloadLinks.value.macos = fallback
+    downloadLinks.value.linux.appimage = fallback
+    downloadLinks.value.linux.deb = fallback
+    downloadLinks.value.linux.rpm = fallback
+    version.value = 'latest'
+  } finally {
+    isLoading.value = false
   }
 }
 
-const showLinuxOptions = ref(false)
+onMounted(() => {
+  fetchLatestRelease()
+})
 </script>
 
 <template>
@@ -50,8 +99,16 @@ const showLinuxOptions = ref(false)
         {{ t('download.subline') }}
       </p>
 
+      <!-- Loading State -->
+      <div v-if="isLoading" class="flex flex-col items-center gap-4 mb-8">
+        <div class="btn btn-primary !px-8 !py-4 text-lg flex items-center gap-3 opacity-70">
+          <Loader2 class="w-6 h-6 animate-spin" />
+          {{ t('download.loading') || 'Loading...' }}
+        </div>
+      </div>
+
       <!-- Primary Download Button -->
-      <div class="flex flex-col items-center gap-4 mb-8">
+      <div v-else class="flex flex-col items-center gap-4 mb-8">
         <!-- Windows -->
         <a
           v-if="userOS === 'windows'"
@@ -90,12 +147,12 @@ const showLinuxOptions = ref(false)
 
         <!-- Version info -->
         <p class="text-sm text-neutral-500 dark:text-neutral-500">
-          v1.0.0 · {{ t('download.freeForever') }}
+          v{{ version }} · {{ t('download.freeForever') }}
         </p>
       </div>
 
       <!-- Other Platforms -->
-      <div class="flex flex-wrap justify-center gap-6 text-sm">
+      <div v-if="!isLoading" class="flex flex-wrap justify-center gap-6 text-sm">
         <span class="text-neutral-500 dark:text-neutral-500">{{ t('download.otherPlatforms') }}:</span>
         <a
           v-if="userOS !== 'windows'"
