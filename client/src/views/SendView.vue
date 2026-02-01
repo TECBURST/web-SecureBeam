@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { invoke } from '@tauri-apps/api/core'
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { open } from '@tauri-apps/plugin-dialog'
 import { ArrowLeft, Upload, File, Folder, Copy, Check, Loader2 } from 'lucide-vue-next'
 
@@ -13,9 +14,58 @@ const wormholeCode = ref<string | null>(null)
 const isLoading = ref(false)
 const isCopied = ref(false)
 const transferProgress = ref(0)
+const transferSpeed = ref(0)
+const transferEta = ref<number | null>(null)
+const bytesTransferred = ref(0)
+const totalBytes = ref(0)
 const status = ref<'idle' | 'preparing' | 'waiting' | 'transferring' | 'complete' | 'error'>('idle')
+const statusMessage = ref<string>('')
 const errorMessage = ref<string | null>(null)
 const isDragOver = ref(false)
+
+// Event listeners
+let unlistenStatus: UnlistenFn | null = null
+let unlistenProgress: UnlistenFn | null = null
+let unlistenComplete: UnlistenFn | null = null
+
+// Setup event listeners
+onMounted(async () => {
+  unlistenStatus = await listen<string>('transfer-status', (event) => {
+    statusMessage.value = event.payload
+    if (event.payload.includes('Transferring')) {
+      status.value = 'transferring'
+    }
+  })
+
+  unlistenProgress = await listen<{
+    bytes_transferred: number
+    total_bytes: number
+    percentage: number
+    speed_mbps: number
+    eta_seconds: number | null
+    status: string
+  }>('transfer-progress', (event) => {
+    transferProgress.value = Math.round(event.payload.percentage)
+    transferSpeed.value = event.payload.speed_mbps
+    transferEta.value = event.payload.eta_seconds
+    bytesTransferred.value = event.payload.bytes_transferred
+    totalBytes.value = event.payload.total_bytes
+    status.value = 'transferring'
+  })
+
+  unlistenComplete = await listen('transfer-complete', () => {
+    status.value = 'complete'
+    transferProgress.value = 100
+    statusMessage.value = 'Transfer complete!'
+  })
+})
+
+// Cleanup
+onUnmounted(() => {
+  unlistenStatus?.()
+  unlistenProgress?.()
+  unlistenComplete?.()
+})
 
 // Open file picker dialog
 async function openFilePicker() {
@@ -128,6 +178,14 @@ function formatSize(bytes: number): string {
   return `${size.toFixed(unitIndex > 0 ? 2 : 0)} ${units[unitIndex]}`
 }
 
+// Format ETA
+function formatEta(seconds: number | null): string {
+  if (seconds === null || seconds <= 0) return ''
+  if (seconds < 60) return `${Math.round(seconds)}s remaining`
+  if (seconds < 3600) return `${Math.round(seconds / 60)}m remaining`
+  return `${Math.round(seconds / 3600)}h remaining`
+}
+
 // Start transfer
 async function startTransfer() {
   if (!selectedFile.value) return
@@ -135,10 +193,21 @@ async function startTransfer() {
   try {
     isLoading.value = true
     status.value = 'preparing'
+    errorMessage.value = null
+    statusMessage.value = 'Generating code...'
 
+    // Generate code first
     const code = await invoke<string>('generate_code')
     wormholeCode.value = code
     status.value = 'waiting'
+    statusMessage.value = 'Waiting for receiver...'
+
+    // Start the actual transfer (runs in background, listens for receiver)
+    await invoke('start_send', {
+      path: selectedFile.value.path,
+      code: code,
+      isDirectory: selectedFile.value.isDirectory
+    })
 
   } catch (error) {
     console.error('Transfer error:', error)
@@ -173,7 +242,16 @@ function clearSelection() {
   selectedFile.value = null
   wormholeCode.value = null
   status.value = 'idle'
+  statusMessage.value = ''
   errorMessage.value = null
+  transferProgress.value = 0
+  transferSpeed.value = 0
+  transferEta.value = null
+}
+
+// Send another
+function sendAnother() {
+  clearSelection()
 }
 </script>
 
@@ -252,6 +330,7 @@ function clearSelection() {
             </p>
           </div>
           <button
+            v-if="status === 'idle'"
             @click="clearSelection"
             class="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 text-xl"
           >
@@ -261,7 +340,7 @@ function clearSelection() {
       </div>
 
       <!-- Wormhole Code (when waiting) -->
-      <div v-if="wormholeCode" class="card !p-6 text-center">
+      <div v-if="wormholeCode && status !== 'complete'" class="card !p-6 text-center">
         <p class="text-sm text-neutral-500 dark:text-neutral-500 mb-3">
           Share this code with the receiver
         </p>
@@ -276,19 +355,40 @@ function clearSelection() {
           </button>
         </div>
         <p class="text-sm text-neutral-500 dark:text-neutral-500 mt-4">
-          Waiting for receiver to connect...
+          {{ statusMessage || 'Waiting for receiver to connect...' }}
         </p>
       </div>
 
       <!-- Progress Bar (when transferring) -->
       <div v-if="status === 'transferring'" class="card !p-6">
         <div class="flex justify-between text-sm mb-2">
-          <span class="text-neutral-600 dark:text-neutral-400">Transferring...</span>
+          <span class="text-neutral-600 dark:text-neutral-400">{{ statusMessage || 'Transferring...' }}</span>
           <span class="text-neutral-900 dark:text-white font-medium">{{ transferProgress }}%</span>
         </div>
         <div class="progress-bar">
           <div class="progress-bar-fill" :style="{ width: `${transferProgress}%` }"></div>
         </div>
+        <!-- Transfer Stats -->
+        <div class="flex justify-between text-xs text-neutral-500 dark:text-neutral-500 mt-3">
+          <span>{{ formatSize(bytesTransferred) }} / {{ formatSize(totalBytes) }}</span>
+          <span v-if="transferSpeed > 0">{{ transferSpeed.toFixed(2) }} MB/s</span>
+        </div>
+        <div v-if="transferEta" class="text-xs text-neutral-500 dark:text-neutral-500 mt-1 text-center">
+          {{ formatEta(transferEta) }}
+        </div>
+      </div>
+
+      <!-- Transfer Complete -->
+      <div v-if="status === 'complete'" class="card !p-6 text-center">
+        <div class="w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mx-auto mb-4">
+          <Check class="w-8 h-8 text-green-600 dark:text-green-400" />
+        </div>
+        <h3 class="text-xl font-semibold text-neutral-900 dark:text-white mb-2">
+          Transfer Complete
+        </h3>
+        <p class="text-neutral-500 dark:text-neutral-500">
+          File sent successfully
+        </p>
       </div>
 
       <!-- Error Message -->
@@ -297,7 +397,7 @@ function clearSelection() {
       </div>
 
       <!-- Action Buttons -->
-      <div v-if="!wormholeCode" class="flex gap-4">
+      <div v-if="status === 'idle'" class="flex gap-4">
         <button @click="cancel" class="btn btn-secondary flex-1">
           Cancel
         </button>
@@ -308,6 +408,13 @@ function clearSelection() {
         >
           <Loader2 v-if="isLoading" class="w-4 h-4 mr-2 animate-spin" />
           Generate Code
+        </button>
+      </div>
+
+      <!-- Send Another Button -->
+      <div v-if="status === 'complete'" class="flex gap-4">
+        <button @click="sendAnother" class="btn btn-primary w-full">
+          Send Another File
         </button>
       </div>
     </div>
