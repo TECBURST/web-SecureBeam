@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { invoke } from '@tauri-apps/api/core'
+import { open } from '@tauri-apps/plugin-dialog'
 import { ArrowLeft, Upload, File, Folder, Copy, Check, Loader2 } from 'lucide-vue-next'
 
 const router = useRouter()
@@ -14,30 +15,109 @@ const isCopied = ref(false)
 const transferProgress = ref(0)
 const status = ref<'idle' | 'preparing' | 'waiting' | 'transferring' | 'complete' | 'error'>('idle')
 const errorMessage = ref<string | null>(null)
+const isDragOver = ref(false)
+
+// Open file picker dialog
+async function openFilePicker() {
+  try {
+    const selected = await open({
+      multiple: false,
+      directory: false,
+      title: 'Select a file to send'
+    })
+
+    if (selected) {
+      const path = selected as string
+      const name = path.split(/[/\\]/).pop() || 'Unknown'
+
+      try {
+        const info = await invoke<{ name: string; size: number; compressed: boolean }>('prepare_file', { path })
+        selectedFile.value = {
+          name: info.name,
+          size: info.size,
+          path: path,
+          isDirectory: false
+        }
+      } catch {
+        selectedFile.value = {
+          name,
+          size: 0,
+          path: path,
+          isDirectory: false
+        }
+      }
+    }
+  } catch (error) {
+    console.error('File picker error:', error)
+    errorMessage.value = 'Could not open file picker'
+  }
+}
+
+// Open folder picker dialog
+async function openFolderPicker() {
+  try {
+    const selected = await open({
+      multiple: false,
+      directory: true,
+      title: 'Select a folder to send'
+    })
+
+    if (selected) {
+      const path = selected as string
+      const name = path.split(/[/\\]/).pop() || 'Folder'
+
+      try {
+        const info = await invoke<{ name: string; size: number; compressed: boolean }>('prepare_directory', { path })
+        selectedFile.value = {
+          name: info.name,
+          size: info.size,
+          path: path,
+          isDirectory: true
+        }
+      } catch {
+        selectedFile.value = {
+          name,
+          size: 0,
+          path: path,
+          isDirectory: true
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Folder picker error:', error)
+    errorMessage.value = 'Could not open folder picker'
+  }
+}
+
+// Handle drag over
+function handleDragOver(event: DragEvent) {
+  event.preventDefault()
+  isDragOver.value = true
+}
+
+// Handle drag leave
+function handleDragLeave(event: DragEvent) {
+  event.preventDefault()
+  isDragOver.value = false
+}
 
 // Handle file drop
 async function handleDrop(event: DragEvent) {
   event.preventDefault()
+  isDragOver.value = false
+
   const files = event.dataTransfer?.files
   if (files && files.length > 0) {
-    // For now, just use the first file
-    // TODO: Integrate with Tauri file system API
-    const file = files[0]
-    selectedFile.value = {
-      name: file.name,
-      size: file.size,
-      path: '', // Will be set by Tauri
-      isDirectory: false,
-    }
+    errorMessage.value = 'Please use the buttons below to select files.'
+    setTimeout(() => {
+      errorMessage.value = null
+    }, 3000)
   }
-}
-
-function handleDragOver(event: DragEvent) {
-  event.preventDefault()
 }
 
 // Format file size
 function formatSize(bytes: number): string {
+  if (bytes === 0) return 'Unknown size'
   const units = ['B', 'KB', 'MB', 'GB']
   let size = bytes
   let unitIndex = 0
@@ -56,13 +136,9 @@ async function startTransfer() {
     isLoading.value = true
     status.value = 'preparing'
 
-    // Generate wormhole code
     const code = await invoke<string>('generate_code')
     wormholeCode.value = code
     status.value = 'waiting'
-
-    // TODO: Start actual transfer with securebeam-core
-    // This will be implemented when we integrate the full transfer logic
 
   } catch (error) {
     console.error('Transfer error:', error)
@@ -121,16 +197,41 @@ function clearSelection() {
     <div
       v-if="!selectedFile"
       class="drop-zone flex flex-col items-center justify-center"
+      :class="{ 'ring-2 ring-neutral-400 dark:ring-neutral-500': isDragOver }"
       @drop="handleDrop"
       @dragover="handleDragOver"
+      @dragleave="handleDragLeave"
     >
       <Upload class="w-12 h-12 text-neutral-400 dark:text-neutral-500 mb-4" />
       <p class="text-lg font-medium text-neutral-700 dark:text-neutral-300 mb-2">
-        Drop files here
+        Select a file or folder to share
       </p>
-      <p class="text-sm text-neutral-500 dark:text-neutral-500">
-        or click to browse
+      <p class="text-sm text-neutral-500 dark:text-neutral-500 mb-6">
+        Click one of the buttons below
       </p>
+
+      <!-- Browse Buttons -->
+      <div class="flex gap-3">
+        <button
+          @click="openFilePicker"
+          class="btn btn-primary flex items-center gap-2"
+        >
+          <File class="w-4 h-4" />
+          Browse Files
+        </button>
+        <button
+          @click="openFolderPicker"
+          class="btn btn-secondary flex items-center gap-2"
+        >
+          <Folder class="w-4 h-4" />
+          Browse Folder
+        </button>
+      </div>
+
+      <!-- Error Message -->
+      <div v-if="errorMessage" class="mt-4 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+        <p class="text-amber-700 dark:text-amber-400 text-sm">{{ errorMessage }}</p>
+      </div>
     </div>
 
     <!-- File Selected -->
@@ -152,7 +253,7 @@ function clearSelection() {
           </div>
           <button
             @click="clearSelection"
-            class="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
+            class="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 text-xl"
           >
             &times;
           </button>
