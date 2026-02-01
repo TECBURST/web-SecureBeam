@@ -2,28 +2,18 @@
 import { ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Sun, Moon, Settings, Globe, ChevronDown } from 'lucide-vue-next'
+import { Sun, Moon, Settings, ChevronDown } from 'lucide-vue-next'
 import { useThemeStore } from '@/stores/theme'
-import { SUPPORTED_LOCALES, LOCALE_NAMES, setLocale, getCurrentLocale, type Locale } from '@/i18n'
+import { languages, setLocale, type Locale } from '@/i18n'
+import FlagIcon from '@/components/ui/FlagIcon.vue'
 
-const { t } = useI18n()
+const { locale } = useI18n()
 const themeStore = useThemeStore()
 
 const showLanguageMenu = ref(false)
-const currentLocale = ref<Locale>(getCurrentLocale())
 
-function changeLanguage(locale: Locale) {
-  currentLocale.value = locale
-  setLocale(locale)
-  showLanguageMenu.value = false
-}
-
-function toggleLanguageMenu() {
-  showLanguageMenu.value = !showLanguageMenu.value
-}
-
-// Close menu when clicking outside
-function closeLanguageMenu() {
+function selectLanguage(code: Locale) {
+  setLocale(code)
   showLanguageMenu.value = false
 }
 </script>
@@ -42,45 +32,12 @@ function closeLanguageMenu() {
         <span class="text-base sm:text-lg font-semibold tracking-tight text-neutral-900 dark:text-white">SecureBeam</span>
       </RouterLink>
 
-      <!-- Right Side Actions -->
-      <div class="flex items-center gap-1">
-        <!-- Language Selector -->
-        <div class="relative">
-          <button
-            @click="toggleLanguageMenu"
-            @blur="closeLanguageMenu"
-            class="flex items-center gap-1 px-2 py-2 rounded-lg text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
-            :title="t('settings.language')"
-          >
-            <Globe class="w-5 h-5" />
-            <span class="text-xs font-medium uppercase hidden sm:inline">{{ currentLocale }}</span>
-            <ChevronDown class="w-3 h-3" />
-          </button>
-
-          <!-- Language Dropdown -->
-          <div
-            v-if="showLanguageMenu"
-            class="absolute right-0 mt-1 py-1 w-36 bg-white dark:bg-neutral-800 rounded-lg shadow-lg border border-neutral-200 dark:border-neutral-700 z-50"
-          >
-            <button
-              v-for="locale in SUPPORTED_LOCALES"
-              :key="locale"
-              @mousedown.prevent="changeLanguage(locale)"
-              class="w-full px-3 py-2 text-left text-sm hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors"
-              :class="currentLocale === locale
-                ? 'text-neutral-900 dark:text-white font-medium'
-                : 'text-neutral-600 dark:text-neutral-400'"
-            >
-              {{ LOCALE_NAMES[locale] }}
-            </button>
-          </div>
-        </div>
-
+      <!-- Right Side Controls -->
+      <div class="flex items-center gap-2">
         <!-- Settings -->
         <RouterLink
           to="/settings"
           class="p-2 rounded-lg text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
-          :title="t('nav.settings')"
         >
           <Settings class="w-5 h-5" />
         </RouterLink>
@@ -94,7 +51,53 @@ function closeLanguageMenu() {
           <Moon v-if="themeStore.theme === 'light'" class="w-5 h-5" />
           <Sun v-else class="w-5 h-5" />
         </button>
+
+        <!-- Language Dropdown -->
+        <div class="relative" @click.stop>
+          <button
+            @click="showLanguageMenu = !showLanguageMenu"
+            class="flex items-center gap-1.5 sm:gap-2 text-sm font-medium text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition-colors px-2.5 sm:px-3 py-2 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-800 border border-neutral-200 dark:border-neutral-700"
+          >
+            <FlagIcon :code="locale" size="sm" />
+            <ChevronDown class="w-3 h-3 transition-transform" :class="{ 'rotate-180': showLanguageMenu }" />
+          </button>
+
+          <!-- Dropdown Menu -->
+          <Transition
+            enter-active-class="transition ease-out duration-100"
+            enter-from-class="transform opacity-0 scale-95"
+            enter-to-class="transform opacity-100 scale-100"
+            leave-active-class="transition ease-in duration-75"
+            leave-from-class="transform opacity-100 scale-100"
+            leave-to-class="transform opacity-0 scale-95"
+          >
+            <div
+              v-if="showLanguageMenu"
+              class="absolute right-0 mt-2 w-40 sm:w-44 bg-white dark:bg-neutral-800 rounded-xl shadow-lg border border-neutral-200 dark:border-neutral-700 py-1 z-50"
+            >
+              <button
+                v-for="lang in languages"
+                :key="lang.code"
+                @click="selectLanguage(lang.code)"
+                class="w-full px-3 sm:px-4 py-2.5 text-sm text-left flex items-center gap-2.5 sm:gap-3 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors text-neutral-700 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white"
+                :class="{ 'bg-neutral-100 dark:bg-neutral-700 font-semibold text-neutral-900 dark:text-white': locale === lang.code }"
+              >
+                <FlagIcon :code="lang.code" size="sm" />
+                <span>{{ lang.name }}</span>
+              </button>
+            </div>
+          </Transition>
+        </div>
       </div>
     </div>
   </header>
+
+  <!-- Click outside to close dropdown -->
+  <Teleport to="body">
+    <div
+      v-if="showLanguageMenu"
+      class="fixed inset-0 z-40"
+      @click="showLanguageMenu = false"
+    ></div>
+  </Teleport>
 </template>

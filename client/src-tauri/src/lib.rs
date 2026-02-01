@@ -618,13 +618,10 @@ async fn test_signaling_connection() -> bool {
     use tokio::time::{timeout, Duration};
 
     let result = timeout(Duration::from_secs(5), async {
-        // Try to establish a WebSocket connection to the signaling server
-        let url = format!("{}/ws/test-ping", DEFAULT_MAILBOX);
-        match tokio_tungstenite::connect_async(&url).await {
-            Ok(_) => {
-                // Successfully connected - connection will be dropped automatically
-                true
-            }
+        // Try HTTP request to the health endpoint
+        let url = format!("{}/health", DEFAULT_MAILBOX);
+        match reqwest::get(&url).await {
+            Ok(response) => response.status().is_success(),
             Err(_) => false,
         }
     })

@@ -4,19 +4,27 @@ import en from './locales/en'
 import de from './locales/de'
 import fr from './locales/fr'
 import es from './locales/es'
+import it from './locales/it'
+import ru from './locales/ru'
+import nl from './locales/nl'
+import pl from './locales/pl'
 import zh from './locales/zh'
 
-export type Locale = 'en' | 'de' | 'fr' | 'es' | 'zh'
+export type Locale = 'en' | 'de' | 'fr' | 'es' | 'it' | 'ru' | 'nl' | 'pl' | 'zh'
 
-export const SUPPORTED_LOCALES: Locale[] = ['en', 'de', 'fr', 'es', 'zh']
+export const languages = [
+  { code: 'en' as Locale, name: 'English' },
+  { code: 'de' as Locale, name: 'Deutsch' },
+  { code: 'fr' as Locale, name: 'Francais' },
+  { code: 'es' as Locale, name: 'Espanol' },
+  { code: 'it' as Locale, name: 'Italiano' },
+  { code: 'ru' as Locale, name: 'Russkiy' },
+  { code: 'nl' as Locale, name: 'Nederlands' },
+  { code: 'pl' as Locale, name: 'Polski' },
+  { code: 'zh' as Locale, name: '中文' }
+]
 
-export const LOCALE_NAMES: Record<Locale, string> = {
-  en: 'English',
-  de: 'Deutsch',
-  fr: 'Francais',
-  es: 'Espanol',
-  zh: '中文'
-}
+export const SUPPORTED_LOCALES: Locale[] = languages.map(l => l.code)
 
 function getInitialLocale(): Locale {
   // Check localStorage first
@@ -43,6 +51,10 @@ const i18n = createI18n({
     de,
     fr,
     es,
+    it,
+    ru,
+    nl,
+    pl,
     zh
   }
 })

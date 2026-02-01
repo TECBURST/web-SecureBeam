@@ -3,9 +3,8 @@ import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { open } from '@tauri-apps/plugin-dialog'
 import { invoke } from '@tauri-apps/api/core'
-import { ArrowLeft, Folder, Wifi, CheckCircle, XCircle, Loader2, Globe } from 'lucide-vue-next'
+import { ArrowLeft, Folder, Wifi, CheckCircle, XCircle, Loader2, FolderOpen, RefreshCw } from 'lucide-vue-next'
 import { RouterLink } from 'vue-router'
-import { SUPPORTED_LOCALES, LOCALE_NAMES, setLocale, getCurrentLocale, type Locale } from '../i18n'
 
 const { t } = useI18n()
 
@@ -19,9 +18,6 @@ const signalingStatus = ref<'unknown' | 'online' | 'offline'>('unknown')
 const relayStatus = ref<'unknown' | 'online' | 'offline'>('unknown')
 const signalingLatency = ref<number | null>(null)
 const relayLatency = ref<number | null>(null)
-
-// Language
-const currentLocale = ref<Locale>(getCurrentLocale())
 
 // App version
 const appVersion = ref('1.0.0')
@@ -92,11 +88,6 @@ async function testConnection() {
   isTestingConnection.value = false
 }
 
-function changeLanguage(locale: Locale) {
-  currentLocale.value = locale
-  setLocale(locale)
-}
-
 onMounted(() => {
   loadSettings()
 })
@@ -118,125 +109,108 @@ onMounted(() => {
     </div>
 
     <div class="space-y-6">
-      <!-- Language Section -->
-      <section class="card">
-        <div class="flex items-center gap-3 mb-4">
-          <Globe class="w-5 h-5 text-neutral-600 dark:text-neutral-400" />
-          <h2 class="text-lg font-medium text-neutral-900 dark:text-white">
-            {{ t('settings.language') }}
-          </h2>
-        </div>
-
-        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
-          <button
-            v-for="locale in SUPPORTED_LOCALES"
-            :key="locale"
-            @click="changeLanguage(locale)"
-            class="px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-            :class="currentLocale === locale
-              ? 'bg-neutral-900 dark:bg-white text-white dark:text-neutral-900'
-              : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-700'"
-          >
-            {{ LOCALE_NAMES[locale] }}
-          </button>
-        </div>
-      </section>
-
       <!-- Download Location Section -->
       <section class="card">
-        <div class="flex items-center gap-3 mb-4">
-          <Folder class="w-5 h-5 text-neutral-600 dark:text-neutral-400" />
-          <h2 class="text-lg font-medium text-neutral-900 dark:text-white">
-            {{ t('settings.downloadLocation') }}
-          </h2>
+        <div class="flex items-center gap-3 mb-5">
+          <div class="w-10 h-10 rounded-xl bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center">
+            <Folder class="w-5 h-5 text-neutral-600 dark:text-neutral-400" />
+          </div>
+          <div>
+            <h2 class="text-lg font-medium text-neutral-900 dark:text-white">
+              {{ t('settings.downloadLocation') }}
+            </h2>
+            <p class="text-xs text-neutral-500">{{ t('settings.currentFolder') }}</p>
+          </div>
         </div>
 
-        <div class="flex flex-col sm:flex-row gap-3">
-          <div class="flex-1 px-4 py-3 bg-neutral-100 dark:bg-neutral-800 rounded-lg">
-            <p class="text-xs text-neutral-500 dark:text-neutral-500 mb-1">
-              {{ t('settings.currentFolder') }}
-            </p>
-            <p class="text-sm text-neutral-900 dark:text-white font-mono truncate">
-              {{ isLoadingPath ? '...' : downloadPath }}
-            </p>
-          </div>
-          <button
-            @click="selectDownloadFolder"
-            class="btn-primary whitespace-nowrap"
-          >
-            {{ t('settings.selectFolder') }}
-          </button>
+        <div class="bg-neutral-50 dark:bg-neutral-800/50 rounded-xl p-4 mb-4">
+          <p class="text-sm text-neutral-900 dark:text-white font-mono truncate">
+            {{ isLoadingPath ? '...' : downloadPath }}
+          </p>
         </div>
+
+        <button
+          @click="selectDownloadFolder"
+          class="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 font-medium hover:bg-neutral-800 dark:hover:bg-neutral-100 transition-colors"
+        >
+          <FolderOpen class="w-5 h-5" />
+          {{ t('settings.selectFolder') }}
+        </button>
       </section>
 
       <!-- Connection Test Section -->
       <section class="card">
-        <div class="flex items-center justify-between mb-4">
-          <div class="flex items-center gap-3">
+        <div class="flex items-center gap-3 mb-5">
+          <div class="w-10 h-10 rounded-xl bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center">
             <Wifi class="w-5 h-5 text-neutral-600 dark:text-neutral-400" />
+          </div>
+          <div>
             <h2 class="text-lg font-medium text-neutral-900 dark:text-white">
               {{ t('settings.connectionTest') }}
             </h2>
+            <p class="text-xs text-neutral-500">{{ t('settings.serverStatus') }}</p>
           </div>
-          <button
-            @click="testConnection"
-            :disabled="isTestingConnection"
-            class="btn-secondary flex items-center gap-2"
-          >
-            <Loader2 v-if="isTestingConnection" class="w-4 h-4 animate-spin" />
-            {{ isTestingConnection ? t('settings.testing') : t('settings.testConnection') }}
-          </button>
         </div>
 
-        <div class="space-y-3">
+        <div class="space-y-3 mb-4">
           <!-- Signaling Server -->
-          <div class="flex items-center justify-between p-3 bg-neutral-100 dark:bg-neutral-800 rounded-lg">
+          <div class="flex items-center justify-between p-4 bg-neutral-50 dark:bg-neutral-800/50 rounded-xl">
             <div class="flex items-center gap-3">
               <div
-                class="w-2 h-2 rounded-full"
+                class="w-3 h-3 rounded-full"
                 :class="{
-                  'bg-neutral-400': signalingStatus === 'unknown',
+                  'bg-neutral-300 dark:bg-neutral-600': signalingStatus === 'unknown',
                   'bg-green-500': signalingStatus === 'online',
                   'bg-red-500': signalingStatus === 'offline'
                 }"
               />
-              <span class="text-sm text-neutral-700 dark:text-neutral-300">
+              <span class="text-sm font-medium text-neutral-700 dark:text-neutral-300">
                 {{ t('settings.signaling') }}
               </span>
             </div>
-            <div class="flex items-center gap-2">
-              <span v-if="signalingLatency !== null" class="text-xs text-neutral-500">
+            <div class="flex items-center gap-3">
+              <span v-if="signalingLatency !== null" class="text-xs text-neutral-500 font-mono">
                 {{ signalingLatency }}ms
               </span>
-              <CheckCircle v-if="signalingStatus === 'online'" class="w-4 h-4 text-green-500" />
-              <XCircle v-else-if="signalingStatus === 'offline'" class="w-4 h-4 text-red-500" />
+              <CheckCircle v-if="signalingStatus === 'online'" class="w-5 h-5 text-green-500" />
+              <XCircle v-else-if="signalingStatus === 'offline'" class="w-5 h-5 text-red-500" />
             </div>
           </div>
 
           <!-- Relay Server -->
-          <div class="flex items-center justify-between p-3 bg-neutral-100 dark:bg-neutral-800 rounded-lg">
+          <div class="flex items-center justify-between p-4 bg-neutral-50 dark:bg-neutral-800/50 rounded-xl">
             <div class="flex items-center gap-3">
               <div
-                class="w-2 h-2 rounded-full"
+                class="w-3 h-3 rounded-full"
                 :class="{
-                  'bg-neutral-400': relayStatus === 'unknown',
+                  'bg-neutral-300 dark:bg-neutral-600': relayStatus === 'unknown',
                   'bg-green-500': relayStatus === 'online',
                   'bg-red-500': relayStatus === 'offline'
                 }"
               />
-              <span class="text-sm text-neutral-700 dark:text-neutral-300">
+              <span class="text-sm font-medium text-neutral-700 dark:text-neutral-300">
                 {{ t('settings.relay') }}
               </span>
             </div>
-            <div class="flex items-center gap-2">
-              <span v-if="relayLatency !== null" class="text-xs text-neutral-500">
+            <div class="flex items-center gap-3">
+              <span v-if="relayLatency !== null" class="text-xs text-neutral-500 font-mono">
                 {{ relayLatency }}ms
               </span>
-              <CheckCircle v-if="relayStatus === 'online'" class="w-4 h-4 text-green-500" />
-              <XCircle v-else-if="relayStatus === 'offline'" class="w-4 h-4 text-red-500" />
+              <CheckCircle v-if="relayStatus === 'online'" class="w-5 h-5 text-green-500" />
+              <XCircle v-else-if="relayStatus === 'offline'" class="w-5 h-5 text-red-500" />
             </div>
           </div>
         </div>
+
+        <button
+          @click="testConnection"
+          :disabled="isTestingConnection"
+          class="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 font-medium hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors disabled:opacity-50"
+        >
+          <Loader2 v-if="isTestingConnection" class="w-5 h-5 animate-spin" />
+          <RefreshCw v-else class="w-5 h-5" />
+          {{ isTestingConnection ? t('settings.testing') : t('settings.testConnection') }}
+        </button>
       </section>
 
       <!-- About Section -->
@@ -244,9 +218,9 @@ onMounted(() => {
         <h2 class="text-lg font-medium text-neutral-900 dark:text-white mb-4">
           {{ t('settings.about') }}
         </h2>
-        <div class="text-sm text-neutral-600 dark:text-neutral-400">
-          <p>SecureBeam - {{ t('settings.version') }} {{ appVersion }}</p>
-          <p class="mt-2">
+        <div class="text-sm text-neutral-600 dark:text-neutral-400 space-y-2">
+          <p class="font-medium">SecureBeam v{{ appVersion }}</p>
+          <p>
             End-to-end encrypted file transfer using the Magic Wormhole protocol.
           </p>
         </div>
