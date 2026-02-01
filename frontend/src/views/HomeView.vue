@@ -5,17 +5,6 @@ import { Monitor, Shield, Apple, Terminal, Loader2 } from 'lucide-vue-next'
 
 const { t } = useI18n()
 
-// Detect user's OS
-const userOS = ref<'windows' | 'macos' | 'linux'>('windows')
-if (typeof navigator !== 'undefined') {
-  const platform = navigator.platform.toLowerCase()
-  if (platform.includes('mac')) {
-    userOS.value = 'macos'
-  } else if (platform.includes('linux')) {
-    userOS.value = 'linux'
-  }
-}
-
 // Dynamic download links from GitHub API
 const isLoading = ref(true)
 const version = ref('')
@@ -100,81 +89,55 @@ onMounted(() => {
       </p>
 
       <!-- Loading State -->
-      <div v-if="isLoading" class="flex flex-col items-center gap-4 mb-8">
-        <div class="btn btn-primary !px-8 !py-4 text-lg flex items-center gap-3 opacity-70">
-          <Loader2 class="w-6 h-6 animate-spin" />
-          {{ t('download.loading') || 'Loading...' }}
+      <div v-if="isLoading" class="flex justify-center gap-4 mb-8">
+        <div class="btn btn-primary !px-6 !py-3 flex items-center gap-2 opacity-70">
+          <Loader2 class="w-5 h-5 animate-spin" />
         </div>
       </div>
 
-      <!-- Primary Download Button -->
-      <div v-else class="flex flex-col items-center gap-4 mb-8">
-        <!-- Windows -->
-        <a
-          v-if="userOS === 'windows'"
-          :href="downloadLinks.windows"
-          class="btn btn-primary !px-8 !py-4 text-lg flex items-center gap-3 shadow-lg hover:shadow-xl transition-all"
-        >
-          <Monitor class="w-6 h-6" />
-          {{ t('download.forWindows') }}
-        </a>
-
-        <!-- macOS -->
-        <a
-          v-else-if="userOS === 'macos'"
-          :href="downloadLinks.macos"
-          class="btn btn-primary !px-8 !py-4 text-lg flex items-center gap-3 shadow-lg hover:shadow-xl transition-all"
-        >
-          <Apple class="w-6 h-6" />
-          {{ t('download.forMac') }}
-        </a>
-
-        <!-- Linux -->
-        <div v-else class="flex flex-col items-center gap-3">
-          <button
-            @click="showLinuxOptions = !showLinuxOptions"
-            class="btn btn-primary !px-8 !py-4 text-lg flex items-center gap-3 shadow-lg hover:shadow-xl transition-all"
+      <!-- Download Buttons - All 3 side by side -->
+      <div v-else class="flex flex-col items-center gap-6 mb-8">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full max-w-2xl">
+          <!-- Windows -->
+          <a
+            :href="downloadLinks.windows"
+            class="btn btn-primary !py-4 flex flex-col items-center gap-2 shadow-lg hover:shadow-xl transition-all"
           >
-            <Terminal class="w-6 h-6" />
-            {{ t('download.forLinux') }}
-          </button>
-          <div v-if="showLinuxOptions" class="flex flex-wrap justify-center gap-3 animate-in fade-in">
-            <a :href="downloadLinks.linux.appimage" class="btn btn-secondary">AppImage</a>
-            <a :href="downloadLinks.linux.deb" class="btn btn-secondary">.deb</a>
-            <a :href="downloadLinks.linux.rpm" class="btn btn-secondary">.rpm</a>
+            <Monitor class="w-8 h-8" />
+            <span class="font-medium">Windows</span>
+          </a>
+
+          <!-- macOS -->
+          <a
+            :href="downloadLinks.macos"
+            class="btn btn-primary !py-4 flex flex-col items-center gap-2 shadow-lg hover:shadow-xl transition-all"
+          >
+            <Apple class="w-8 h-8" />
+            <span class="font-medium">macOS</span>
+          </a>
+
+          <!-- Linux -->
+          <div class="flex flex-col">
+            <button
+              @click="showLinuxOptions = !showLinuxOptions"
+              class="btn btn-primary !py-4 flex flex-col items-center gap-2 shadow-lg hover:shadow-xl transition-all w-full"
+            >
+              <Terminal class="w-8 h-8" />
+              <span class="font-medium">Linux</span>
+            </button>
+            <!-- Linux Format Options -->
+            <div v-if="showLinuxOptions" class="flex flex-col gap-2 mt-2">
+              <a :href="downloadLinks.linux.appimage" class="btn btn-secondary text-sm">AppImage</a>
+              <a :href="downloadLinks.linux.deb" class="btn btn-secondary text-sm">.deb (Debian/Ubuntu)</a>
+              <a :href="downloadLinks.linux.rpm" class="btn btn-secondary text-sm">.rpm (Fedora/RHEL)</a>
+            </div>
           </div>
         </div>
 
         <!-- Version info -->
         <p class="text-sm text-neutral-500 dark:text-neutral-500">
-          v{{ version }} · {{ t('download.freeForever') }}
+          v{{ version }}
         </p>
-      </div>
-
-      <!-- Other Platforms -->
-      <div v-if="!isLoading" class="flex flex-wrap justify-center gap-6 text-sm">
-        <span class="text-neutral-500 dark:text-neutral-500">{{ t('download.otherPlatforms') }}:</span>
-        <a
-          v-if="userOS !== 'windows'"
-          :href="downloadLinks.windows"
-          class="text-neutral-700 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white underline underline-offset-4"
-        >
-          Windows
-        </a>
-        <a
-          v-if="userOS !== 'macos'"
-          :href="downloadLinks.macos"
-          class="text-neutral-700 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white underline underline-offset-4"
-        >
-          macOS
-        </a>
-        <a
-          v-if="userOS !== 'linux'"
-          :href="downloadLinks.linux.appimage"
-          class="text-neutral-700 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white underline underline-offset-4"
-        >
-          Linux
-        </a>
       </div>
     </div>
 
